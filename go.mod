@@ -1,4 +1,4 @@
-module github.com/ssgo/tool
+module github.com/ssgo/dao
 
 go 1.12
 
