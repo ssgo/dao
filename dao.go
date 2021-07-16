@@ -181,6 +181,18 @@ func (dao *{{.TableName}}Dao) Get({{.IdFieldParams}}) *{{.TableName}}Item {
 	return nil
 }
 
+{{ if .ValidSet }}
+func (dao *{{.TableName}}Dao) GetWithInvalid({{.IdFieldParams}}) *{{.TableName}}Item {
+	result := make([]{{.TableName}}Item, 0)
+	_ = dao.conn.Query("SELECT {{.SelectFields}} FROM ` + "`" + `{{.TableName}}` + "`" + ` WHERE {{.IdFieldWhere}}", {{.IdFieldArgs}}).To(&result)
+	if len(result) > 0 {
+		result[0].dao = dao
+		return &result[0]
+	}
+	return nil
+}
+{{ end }}
+
 func (dao *{{.TableName}}Dao) Insert(item *{{.TableName}}Item) bool {
 {{ if .HasVersion }}
 	item.Version = dao.getVersion()
@@ -243,12 +255,6 @@ func (dao *{{.TableName}}Dao) UpdateBy(data interface{}, where string, args ...i
 }
 
 {{ if .InvalidSet }}
-func (dao *{{.TableName}}Dao) Delete({{.IdFieldParams}}) bool {
-	r := dao.conn.Exec("DELETE FROM ` + "`" + `{{.TableName}}` + "`" + ` WHERE {{.IdFieldWhere}}", {{.IdFieldArgs}})
-	dao.lastError = r.Error
-	return r.Error == nil && r.Changes() > 0
-}
-{{ else }}
 func (dao *{{.TableName}}Dao) Enable({{.IdFieldParams}}) bool {
 {{ if .HasVersion }}
 	version := dao.getVersion()
@@ -269,6 +275,12 @@ func (dao *{{.TableName}}Dao) Disable({{.IdFieldParams}}) bool {
 {{ else }}
 	r := dao.conn.Exec("UPDATE ` + "`" + `{{.TableName}}` + "`" + ` SET {{.InvalidSet}} WHERE {{.IdFieldWhere}}", {{.IdFieldArgs}})
 {{ end }}
+	dao.lastError = r.Error
+	return r.Error == nil && r.Changes() > 0
+}
+{{ else }}
+func (dao *{{.TableName}}Dao) Delete({{.IdFieldParams}}) bool {
+	r := dao.conn.Exec("DELETE FROM ` + "`" + `{{.TableName}}` + "`" + ` WHERE {{.IdFieldWhere}}", {{.IdFieldArgs}})
 	dao.lastError = r.Error
 	return r.Error == nil && r.Changes() > 0
 }
@@ -330,7 +342,7 @@ func (dao *{{.TableName}}Dao) NewQuery() *{{.TableName}}Query {
 		sql:          "",
 		fields:       "{{.SelectFields}}",
 		where:        "",
-		orderBy:      "",
+		extraSql:       "",
 		args:         []interface{}{},
 		leftJoins:    []string{},
 		leftJoinArgs: []interface{}{},
@@ -344,7 +356,7 @@ type {{.TableName}}Query struct {
 	sql          string
 	fields       string
 	where        string
-	orderBy      string
+	extraSql       string
 	args         []interface{}
 	leftJoins    []string
 	leftJoinArgs []interface{}
@@ -360,12 +372,12 @@ func (query *{{.TableName}}Query) parseFields(fields, table string) string {
 		field = strings.TrimSpace(field)
 		as := ""
 		if strings.ContainsRune(field, ' ') {
-			a := strings.SplitN(field, " ", 2)
+			a := strings.Split(field, " ")
 			field = a[0]
-			if strings.HasPrefix(a[1], "as ") || strings.HasPrefix(a[1], "AS ") {
-				a[1] = a[1][3:]
+			if strings.ToLower(a[len(a)-2]) == "as" && !strings.HasPrefix(a[len(a)-1], "` + "`" + `") {
+				a[len(a)-1] = "` + "`" + `" + a[len(a)-1] + "` + "`" + `"
 			}
-			as = " ` + "`" + `"+a[1]+"` + "`" + `"
+			as = " " + strings.Join(a[1:], " ")
 		}
 		if table != "" {
 			fieldArr[i] = fmt.Sprint("` + "`" + `", table, "` + "`" + `.` + "`" + `", field, "` + "`" + `", as)
@@ -385,6 +397,11 @@ func (query *{{.TableName}}Query) parse(tag string) (string, []interface{}) {
 	validWhere := query.validWhere
 	if tag == "COUNT" {
 		fields = "COUNT(*)"
+	}else if tag == "COUNTALL" {
+		fields = "COUNT(*)"
+		validWhere = ""
+	}else if tag == "ALL" {
+		validWhere = ""
 	}else if tag == "VERSION" {
 		validWhere = ""
 	}
@@ -396,7 +413,7 @@ func (query *{{.TableName}}Query) parse(tag string) (string, []interface{}) {
 		validWhere = strings.ReplaceAll(validWhere, " AND ", " AND `+"`"+`{{.TableName}}`+"`"+`.")
 	}
 
-	return fmt.Sprint("SELECT ", fields, " FROM ` + "`" + `{{.TableName}}` + "`" + `", leftJoinsStr, " WHERE ", query.where, validWhere, query.orderBy), query.args
+	return fmt.Sprint("SELECT ", fields, " FROM ` + "`" + `{{.TableName}}` + "`" + `", leftJoinsStr, " WHERE ", query.where, validWhere, query.extraSql), query.args
 }
 
 func (query *{{.TableName}}Query) Sql(sql string, args ...interface{}) *{{.TableName}}Query {
@@ -483,13 +500,23 @@ func (query *{{.TableName}}Query) OrIn(field string, values ...interface{}) *{{.
 }
 
 func (query *{{.TableName}}Query) OrderBy(orderBy string) *{{.TableName}}Query {
-	query.orderBy = " ORDER BY " + orderBy
+	query.extraSql = " ORDER BY " + orderBy
+	return query
+}
+
+func (query *{{.TableName}}Query) GroupBy(groupBy string) *{{.TableName}}Query {
+	query.extraSql = " GROUP BY " + groupBy
+	return query
+}
+
+func (query *{{.TableName}}Query) Extra(extraSql string) *{{.TableName}}Query {
+	query.extraSql = extraSql
 	return query
 }
 
 func (query *{{.TableName}}Query) LeftJoin(joinTable, fields, on string, args ...interface{}) *{{.TableName}}Query {
 	if !strings.Contains(query.fields, "` + "`" + `{{.TableName}}` + "`" + `.") {
-		query.fields = "` + "`" + `{{.TableName}}` + "`" + `."+strings.ReplaceAll(query.fields, "` + "`" + `,` + "`" + `", "` + "`" + `,` + "`" + `{{.TableName}}` + "`" + `.` + "`" + `")
+		query.fields = "` + "`" + `{{.TableName}}` + "`" + `."+strings.ReplaceAll(query.fields, "` + "`" + `, ` + "`" + `", "` + "`" + `, ` + "`" + `{{.TableName}}` + "`" + `.` + "`" + `")
 	}
 	query.fields += ", "+query.parseFields(fields, joinTable)
 
@@ -509,11 +536,27 @@ func (query *{{.TableName}}Query) Query() *{{.TableName}}Query {
 	return query
 }
 
+{{ if .ValidSet }}
+func (query *{{.TableName}}Query) QueryAll() *{{.TableName}}Query {
+	sql, args := query.parse("ALL")
+	query.result = query.dao.conn.Query(sql, args...)
+	return query
+}
+{{ end }}
+
 func (query *{{.TableName}}Query) Count() int {
 	sql, args := query.parse("COUNT")
 	query.result = query.dao.conn.Query(sql, args...)
 	return int(query.result.IntOnR1C1())
 }
+
+{{ if .ValidSet }}
+func (query *{{.TableName}}Query) CountAll() int {
+	sql, args := query.parse("COUNTALL")
+	query.result = query.dao.conn.Query(sql, args...)
+	return int(query.result.IntOnR1C1())
+}
+{{ end }}
 
 func (query *{{.TableName}}Query) QueryByPage(start, num int) *{{.TableName}}Query {
 	sql, args := query.parse("")
@@ -521,6 +564,15 @@ func (query *{{.TableName}}Query) QueryByPage(start, num int) *{{.TableName}}Que
 	query.result = query.dao.conn.Query(fmt.Sprint(sql, " LIMIT ?,?"), args...)
 	return query
 }
+
+{{ if .ValidSet }}
+func (query *{{.TableName}}Query) QueryAllByPage(start, num int) *{{.TableName}}Query {
+	sql, args := query.parse("ALL")
+	args = append(args, start, num)
+	query.result = query.dao.conn.Query(fmt.Sprint(sql, " LIMIT ?,?"), args...)
+	return query
+}
+{{ end }}
 
 {{ if .HasVersion }}
 func (query *{{.TableName}}Query) QueryByVersion(minVersion, maxVersion uint64) uint64 {
@@ -675,6 +727,27 @@ func (query *{{.TableName}}Query) ListBy(fields ...string) map[string]*{{.TableN
 	return out
 }
 
+func (query *{{.TableName}}Query) LastSql() *string {
+	if query.result != nil {
+		return query.result.Sql
+	}
+	return nil
+}
+
+func (query *{{.TableName}}Query) LastArgs() []interface{} {
+	if query.result != nil {
+		return query.result.Args
+	}
+	return nil
+}
+
+func (query *{{.TableName}}Query) LastError() error {
+	if query.result != nil {
+		return query.result.Error
+	}
+	return nil
+}
+
 type {{.TableName}}Item struct {
 	dao *{{.TableName}}Dao
 {{range .Fields}}
@@ -703,14 +776,6 @@ func (item *{{.TableName}}Item) Save() bool {
 }
 
 {{ if .InvalidSet }}
-func (item *{{.TableName}}Item) Delete() bool {
-	if item.dao == nil {
-		log.DefaultLogger.Error("delete item without dao", "dao", "{{.DBName}}", "table", "{{.TableName}}", "item", item)
-		return false
-	}
-	return item.dao.Delete({{.IdFieldItemArgs}})
-}
-{{ else }}
 func (item *{{.TableName}}Item) Enable() bool {
 	if item.dao == nil {
 		log.DefaultLogger.Error("enable item without dao", "dao", "{{.DBName}}", "table", "{{.TableName}}", "item", item)
@@ -725,6 +790,14 @@ func (item *{{.TableName}}Item) Disable() bool {
 		return false
 	}
 	return item.dao.Disable({{.IdFieldItemArgs}})
+}
+{{ else }}
+func (item *{{.TableName}}Item) Delete() bool {
+	if item.dao == nil {
+		log.DefaultLogger.Error("delete item without dao", "dao", "{{.DBName}}", "table", "{{.TableName}}", "item", item)
+		return false
+	}
+	return item.dao.Delete({{.IdFieldItemArgs}})
 }
 {{ end }}
 
@@ -1067,7 +1140,8 @@ func main() {
 					}
 					fieldTypesForId[desc.Field] = typ // 用于ID的类型不加指针
 
-					if desc.Null == "YES" || desc.Default != nil || desc.Extra == "auto_increment" {
+					//if desc.Null == "YES" || desc.Default != nil || desc.Extra == "auto_increment" {
+					if desc.Null == "YES" || desc.Extra == "auto_increment" {
 						tableData.PointFields = append(tableData.PointFields, FieldData{
 							Name: u.GetUpperName(desc.Field),
 							Type: typ,
