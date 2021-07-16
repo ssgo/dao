@@ -46,6 +46,7 @@ type DaoData struct {
 	DBName       string
 	VersionField string
 	Tables       []string
+	FixedTables  []string
 }
 
 var configTpl = `package {{.DBName}}
@@ -68,7 +69,7 @@ func ConfigureRedis(dsn string) {
 }
 
 func ConfigureInjects() {
-	{{range .Tables}}
+	{{range .FixedTables}}
 	s.SetInject(&{{.}}Dao{conn: _conn, rd: _rd}){{end}}
 }
 `
@@ -82,6 +83,7 @@ type FieldData struct {
 type TableData struct {
 	DBName            string
 	TableName         string
+	FixedTableName    string
 	IsAutoId          bool
 	IdFieldWhere      string
 	IdFieldArgs       string
@@ -112,14 +114,14 @@ import (
 	"strings"
 )
 
-type {{.TableName}}Dao struct {
+type {{.FixedTableName}}Dao struct {
 	conn *db.DB
 	rd *redis.Redis
 	logger *log.Logger
 	lastError error
 }
 
-func Get{{.TableName}}Dao(logger *log.Logger) *{{.TableName}}Dao {
+func Get{{.FixedTableName}}Dao(logger *log.Logger) *{{.FixedTableName}}Dao {
 	if _conn == nil {
 		log.DefaultLogger.Error("no db configured", "dao", "{{.DBName}}", "table", "{{.TableName}}")
 		return nil
@@ -134,14 +136,14 @@ func Get{{.TableName}}Dao(logger *log.Logger) *{{.TableName}}Dao {
 		}
 	}
 
-	return &{{.TableName}}Dao{
+	return &{{.FixedTableName}}Dao{
 		conn: conn,
 		rd: rd,
 	}
 }
 
-func (dao *{{.TableName}}Dao) CopyByLogger(logger *log.Logger) *{{.TableName}}Dao {
-	newDao := new({{.TableName}}Dao)
+func (dao *{{.FixedTableName}}Dao) CopyByLogger(logger *log.Logger) *{{.FixedTableName}}Dao {
+	newDao := new({{.FixedTableName}}Dao)
 	if logger == nil {
 		logger = log.DefaultLogger
 	}
@@ -155,24 +157,24 @@ func (dao *{{.TableName}}Dao) CopyByLogger(logger *log.Logger) *{{.TableName}}Da
 	return newDao
 }
 
-func (dao *{{.TableName}}Dao) LastError() error {
+func (dao *{{.FixedTableName}}Dao) LastError() error {
 	return dao.lastError
 }
 
-func (dao *{{.TableName}}Dao) GetConnection() *db.DB {
+func (dao *{{.FixedTableName}}Dao) GetConnection() *db.DB {
 	return dao.conn
 }
 
-func (dao *{{.TableName}}Dao) New() *{{.TableName}}Item {
-	return &{{.TableName}}Item{dao: dao}
+func (dao *{{.FixedTableName}}Dao) New() *{{.FixedTableName}}Item {
+	return &{{.FixedTableName}}Item{dao: dao}
 }
 
-func (dao *{{.TableName}}Dao) Attach(item *{{.TableName}}Item) {
+func (dao *{{.FixedTableName}}Dao) Attach(item *{{.FixedTableName}}Item) {
 	item.dao = dao
 }
 
-func (dao *{{.TableName}}Dao) Get({{.IdFieldParams}}) *{{.TableName}}Item {
-	result := make([]{{.TableName}}Item, 0)
+func (dao *{{.FixedTableName}}Dao) Get({{.IdFieldParams}}) *{{.FixedTableName}}Item {
+	result := make([]{{.FixedTableName}}Item, 0)
 	_ = dao.conn.Query("SELECT {{.SelectFields}} FROM ` + "`" + `{{.TableName}}` + "`" + ` WHERE {{.IdFieldWhere}}{{.ValidWhere}}", {{.IdFieldArgs}}).To(&result)
 	if len(result) > 0 {
 		result[0].dao = dao
@@ -182,8 +184,8 @@ func (dao *{{.TableName}}Dao) Get({{.IdFieldParams}}) *{{.TableName}}Item {
 }
 
 {{ if .ValidSet }}
-func (dao *{{.TableName}}Dao) GetWithInvalid({{.IdFieldParams}}) *{{.TableName}}Item {
-	result := make([]{{.TableName}}Item, 0)
+func (dao *{{.FixedTableName}}Dao) GetWithInvalid({{.IdFieldParams}}) *{{.FixedTableName}}Item {
+	result := make([]{{.FixedTableName}}Item, 0)
 	_ = dao.conn.Query("SELECT {{.SelectFields}} FROM ` + "`" + `{{.TableName}}` + "`" + ` WHERE {{.IdFieldWhere}}", {{.IdFieldArgs}}).To(&result)
 	if len(result) > 0 {
 		result[0].dao = dao
@@ -193,7 +195,7 @@ func (dao *{{.TableName}}Dao) GetWithInvalid({{.IdFieldParams}}) *{{.TableName}}
 }
 {{ end }}
 
-func (dao *{{.TableName}}Dao) Insert(item *{{.TableName}}Item) bool {
+func (dao *{{.FixedTableName}}Dao) Insert(item *{{.FixedTableName}}Item) bool {
 {{ if .HasVersion }}
 	item.Version = dao.getVersion()
 {{ end }}
@@ -205,7 +207,7 @@ func (dao *{{.TableName}}Dao) Insert(item *{{.TableName}}Item) bool {
 	return r.Error == nil && r.Changes() > 0
 }
 
-func (dao *{{.TableName}}Dao) Replace(item *{{.TableName}}Item) bool {
+func (dao *{{.FixedTableName}}Dao) Replace(item *{{.FixedTableName}}Item) bool {
 {{ if .HasVersion }}
 	item.Version = dao.getVersion()
 {{ end }}
@@ -216,7 +218,7 @@ func (dao *{{.TableName}}Dao) Replace(item *{{.TableName}}Item) bool {
 	return r.Error == nil && r.Changes() > 0
 }
 
-func (dao *{{.TableName}}Dao) Update(data interface{}, {{.IdFieldParams}}) bool {
+func (dao *{{.FixedTableName}}Dao) Update(data interface{}, {{.IdFieldParams}}) bool {
 {{ if .HasVersion }}
 	updateData, ok := data.(map[string]interface{})
 	if !ok {
@@ -235,7 +237,7 @@ func (dao *{{.TableName}}Dao) Update(data interface{}, {{.IdFieldParams}}) bool 
 	return r.Error == nil && r.Changes() > 0
 }
 
-func (dao *{{.TableName}}Dao) UpdateBy(data interface{}, where string, args ...interface{}) bool {
+func (dao *{{.FixedTableName}}Dao) UpdateBy(data interface{}, where string, args ...interface{}) bool {
 {{ if .HasVersion }}
 	updateData, ok := data.(map[string]interface{})
 	if !ok {
@@ -255,7 +257,7 @@ func (dao *{{.TableName}}Dao) UpdateBy(data interface{}, where string, args ...i
 }
 
 {{ if .InvalidSet }}
-func (dao *{{.TableName}}Dao) Enable({{.IdFieldParams}}) bool {
+func (dao *{{.FixedTableName}}Dao) Enable({{.IdFieldParams}}) bool {
 {{ if .HasVersion }}
 	version := dao.getVersion()
 	r := dao.conn.Exec("UPDATE ` + "`" + `{{.TableName}}` + "`" + ` SET {{.ValidSet}}, ` + "`" + `{{.VersionField}}` + "`" + `=? WHERE {{.IdFieldWhere}}", version, {{.IdFieldArgs}})
@@ -267,7 +269,7 @@ func (dao *{{.TableName}}Dao) Enable({{.IdFieldParams}}) bool {
 	return r.Error == nil && r.Changes() > 0
 }
 
-func (dao *{{.TableName}}Dao) Disable({{.IdFieldParams}}) bool {
+func (dao *{{.FixedTableName}}Dao) Disable({{.IdFieldParams}}) bool {
 {{ if .HasVersion }}
 	version := dao.getVersion()
 	r := dao.conn.Exec("UPDATE ` + "`" + `{{.TableName}}` + "`" + ` SET {{.InvalidSet}}, ` + "`" + `{{.VersionField}}` + "`" + `=? WHERE {{.IdFieldWhere}}", version, {{.IdFieldArgs}})
@@ -279,7 +281,7 @@ func (dao *{{.TableName}}Dao) Disable({{.IdFieldParams}}) bool {
 	return r.Error == nil && r.Changes() > 0
 }
 {{ else }}
-func (dao *{{.TableName}}Dao) Delete({{.IdFieldParams}}) bool {
+func (dao *{{.FixedTableName}}Dao) Delete({{.IdFieldParams}}) bool {
 	r := dao.conn.Exec("DELETE FROM ` + "`" + `{{.TableName}}` + "`" + ` WHERE {{.IdFieldWhere}}", {{.IdFieldArgs}})
 	dao.lastError = r.Error
 	return r.Error == nil && r.Changes() > 0
@@ -287,7 +289,7 @@ func (dao *{{.TableName}}Dao) Delete({{.IdFieldParams}}) bool {
 {{ end }}
 
 {{ if .HasVersion }}
-func (dao *{{.TableName}}Dao) getVersion() uint64 {
+func (dao *{{.FixedTableName}}Dao) getVersion() uint64 {
 	var version uint64 = 0
 	if dao.rd != nil {
 		version = uint64(dao.rd.INCR("_DATA_VERSION_{{.TableName}}"))
@@ -316,7 +318,7 @@ func (dao *{{.TableName}}Dao) getVersion() uint64 {
 	return version
 }
 
-func (dao *{{.TableName}}Dao) commitVersion(version uint64) {
+func (dao *{{.FixedTableName}}Dao) commitVersion(version uint64) {
 	if dao.rd != nil {
 		// 先存储当前版本完成标记，然后检查所有新版本是否完成以设置MAX_VERSION
 		dao.rd.DEL("_DATA_VERSION_DOING_{{.TableName}}_"+u.String(version))
@@ -335,8 +337,8 @@ func (dao *{{.TableName}}Dao) commitVersion(version uint64) {
 }
 {{ end }}
 
-func (dao *{{.TableName}}Dao) NewQuery() *{{.TableName}}Query {
-	return &{{.TableName}}Query{
+func (dao *{{.FixedTableName}}Dao) NewQuery() *{{.FixedTableName}}Query {
+	return &{{.FixedTableName}}Query{
 		dao:          dao,
 		validWhere:   "{{.ValidWhere}}",
 		sql:          "",
@@ -349,8 +351,8 @@ func (dao *{{.TableName}}Dao) NewQuery() *{{.TableName}}Query {
 	}
 }
 
-type {{.TableName}}Query struct {
-	dao          *{{.TableName}}Dao
+type {{.FixedTableName}}Query struct {
+	dao          *{{.FixedTableName}}Dao
 	result       *db.QueryResult
 	validWhere   string
 	sql          string
@@ -362,7 +364,7 @@ type {{.TableName}}Query struct {
 	leftJoinArgs []interface{}
 }
 
-func (query *{{.TableName}}Query) parseFields(fields, table string) string {
+func (query *{{.FixedTableName}}Query) parseFields(fields, table string) string {
 	if fields == "" || strings.ContainsRune(fields, '(') || strings.ContainsRune(fields, '` + "`" + `') {
 		return fields
 	}
@@ -388,7 +390,7 @@ func (query *{{.TableName}}Query) parseFields(fields, table string) string {
 	return strings.Join(fieldArr, ",")
 }
 
-func (query *{{.TableName}}Query) parse(tag string) (string, []interface{}) {
+func (query *{{.FixedTableName}}Query) parse(tag string) (string, []interface{}) {
 	if query.sql != "" {
 		return query.sql, query.args
 	}
@@ -410,24 +412,24 @@ func (query *{{.TableName}}Query) parse(tag string) (string, []interface{}) {
 	if len(query.leftJoins) > 0 {
 		leftJoinsStr = " " + strings.Join(query.leftJoins, " ")
 		query.args = append(query.leftJoinArgs, query.args...)
-		validWhere = strings.ReplaceAll(validWhere, " AND ", " AND `+"`"+`{{.TableName}}`+"`"+`.")
+		validWhere = strings.ReplaceAll(validWhere, " AND ", " AND ` + "`" + `{{.TableName}}` + "`" + `.")
 	}
 
 	return fmt.Sprint("SELECT ", fields, " FROM ` + "`" + `{{.TableName}}` + "`" + `", leftJoinsStr, " WHERE ", query.where, validWhere, query.extraSql), query.args
 }
 
-func (query *{{.TableName}}Query) Sql(sql string, args ...interface{}) *{{.TableName}}Query {
+func (query *{{.FixedTableName}}Query) Sql(sql string, args ...interface{}) *{{.FixedTableName}}Query {
 	query.sql = sql
 	query.args = args
 	return query
 }
 
-func (query *{{.TableName}}Query) Fields(fields string) *{{.TableName}}Query {
+func (query *{{.FixedTableName}}Query) Fields(fields string) *{{.FixedTableName}}Query {
 	query.fields = query.parseFields(fields, "")
 	return query
 }
 
-func (query *{{.TableName}}Query) AppendFields(fields string) *{{.TableName}}Query {
+func (query *{{.FixedTableName}}Query) AppendFields(fields string) *{{.FixedTableName}}Query {
 	if query.fields != "" {
 		query.fields += ", "
 	}
@@ -435,7 +437,7 @@ func (query *{{.TableName}}Query) AppendFields(fields string) *{{.TableName}}Que
 	return query
 }
 
-func (query *{{.TableName}}Query) fixArgs(args []interface{}) []interface{} {
+func (query *{{.FixedTableName}}Query) fixArgs(args []interface{}) []interface{} {
 	if len(args) == 1 {
 		t := u.FinalType(reflect.ValueOf(args[0]))
 		if t.Kind() == reflect.Slice && t.Elem().Kind() != reflect.Uint8 {
@@ -445,21 +447,21 @@ func (query *{{.TableName}}Query) fixArgs(args []interface{}) []interface{} {
 	return args
 }
 
-func (query *{{.TableName}}Query) Where(where string, args ...interface{}) *{{.TableName}}Query {
+func (query *{{.FixedTableName}}Query) Where(where string, args ...interface{}) *{{.FixedTableName}}Query {
 	args = query.fixArgs(args)
 	query.where = where
 	query.args = args
 	return query
 }
 
-func (query *{{.TableName}}Query) In(field string, values ...interface{}) *{{.TableName}}Query {
+func (query *{{.FixedTableName}}Query) In(field string, values ...interface{}) *{{.FixedTableName}}Query {
 	values = query.fixArgs(values)
 	query.where = "` + "`" + `"+field+"` + "`" + ` IN "+query.dao.conn.InKeys(len(values))
 	query.args = values
 	return query
 }
 
-func (query *{{.TableName}}Query) And(where string, args ...interface{}) *{{.TableName}}Query {
+func (query *{{.FixedTableName}}Query) And(where string, args ...interface{}) *{{.FixedTableName}}Query {
 	args = query.fixArgs(args)
 	if query.where != "" {
 		query.where += " AND "
@@ -469,7 +471,7 @@ func (query *{{.TableName}}Query) And(where string, args ...interface{}) *{{.Tab
 	return query
 }
 
-func (query *{{.TableName}}Query) Or(where string, args ...interface{}) *{{.TableName}}Query {
+func (query *{{.FixedTableName}}Query) Or(where string, args ...interface{}) *{{.FixedTableName}}Query {
 	args = query.fixArgs(args)
 	if query.where != "" {
 		query.where += " OR "
@@ -479,7 +481,7 @@ func (query *{{.TableName}}Query) Or(where string, args ...interface{}) *{{.Tabl
 	return query
 }
 
-func (query *{{.TableName}}Query) AndIn(field string, values ...interface{}) *{{.TableName}}Query {
+func (query *{{.FixedTableName}}Query) AndIn(field string, values ...interface{}) *{{.FixedTableName}}Query {
 	values = query.fixArgs(values)
 	if query.where != "" {
 		query.where += " AND "
@@ -489,7 +491,7 @@ func (query *{{.TableName}}Query) AndIn(field string, values ...interface{}) *{{
 	return query
 }
 
-func (query *{{.TableName}}Query) OrIn(field string, values ...interface{}) *{{.TableName}}Query {
+func (query *{{.FixedTableName}}Query) OrIn(field string, values ...interface{}) *{{.FixedTableName}}Query {
 	values = query.fixArgs(values)
 	if query.where != "" {
 		query.where += " OR "
@@ -499,22 +501,22 @@ func (query *{{.TableName}}Query) OrIn(field string, values ...interface{}) *{{.
 	return query
 }
 
-func (query *{{.TableName}}Query) OrderBy(orderBy string) *{{.TableName}}Query {
+func (query *{{.FixedTableName}}Query) OrderBy(orderBy string) *{{.FixedTableName}}Query {
 	query.extraSql = " ORDER BY " + orderBy
 	return query
 }
 
-func (query *{{.TableName}}Query) GroupBy(groupBy string) *{{.TableName}}Query {
+func (query *{{.FixedTableName}}Query) GroupBy(groupBy string) *{{.FixedTableName}}Query {
 	query.extraSql = " GROUP BY " + groupBy
 	return query
 }
 
-func (query *{{.TableName}}Query) Extra(extraSql string) *{{.TableName}}Query {
+func (query *{{.FixedTableName}}Query) Extra(extraSql string) *{{.FixedTableName}}Query {
 	query.extraSql = extraSql
 	return query
 }
 
-func (query *{{.TableName}}Query) LeftJoin(joinTable, fields, on string, args ...interface{}) *{{.TableName}}Query {
+func (query *{{.FixedTableName}}Query) LeftJoin(joinTable, fields, on string, args ...interface{}) *{{.FixedTableName}}Query {
 	if !strings.Contains(query.fields, "` + "`" + `{{.TableName}}` + "`" + `.") {
 		query.fields = "` + "`" + `{{.TableName}}` + "`" + `."+strings.ReplaceAll(query.fields, "` + "`" + `, ` + "`" + `", "` + "`" + `, ` + "`" + `{{.TableName}}` + "`" + `.` + "`" + `")
 	}
@@ -525,40 +527,40 @@ func (query *{{.TableName}}Query) LeftJoin(joinTable, fields, on string, args ..
 	return query
 }
 
-func (query *{{.TableName}}Query) By({{.IdFieldParams}}) *{{.TableName}}Query {
+func (query *{{.FixedTableName}}Query) By({{.IdFieldParams}}) *{{.FixedTableName}}Query {
 	query.Where("{{.IdFieldWhere}}", {{.IdFieldArgs}})
 	return query
 }
 
-func (query *{{.TableName}}Query) Query() *{{.TableName}}Query {
+func (query *{{.FixedTableName}}Query) Query() *{{.FixedTableName}}Query {
 	sql, args := query.parse("")
 	query.result = query.dao.conn.Query(sql, args...)
 	return query
 }
 
 {{ if .ValidSet }}
-func (query *{{.TableName}}Query) QueryAll() *{{.TableName}}Query {
+func (query *{{.FixedTableName}}Query) QueryAll() *{{.FixedTableName}}Query {
 	sql, args := query.parse("ALL")
 	query.result = query.dao.conn.Query(sql, args...)
 	return query
 }
 {{ end }}
 
-func (query *{{.TableName}}Query) Count() int {
+func (query *{{.FixedTableName}}Query) Count() int {
 	sql, args := query.parse("COUNT")
 	query.result = query.dao.conn.Query(sql, args...)
 	return int(query.result.IntOnR1C1())
 }
 
 {{ if .ValidSet }}
-func (query *{{.TableName}}Query) CountAll() int {
+func (query *{{.FixedTableName}}Query) CountAll() int {
 	sql, args := query.parse("COUNTALL")
 	query.result = query.dao.conn.Query(sql, args...)
 	return int(query.result.IntOnR1C1())
 }
 {{ end }}
 
-func (query *{{.TableName}}Query) QueryByPage(start, num int) *{{.TableName}}Query {
+func (query *{{.FixedTableName}}Query) QueryByPage(start, num int) *{{.FixedTableName}}Query {
 	sql, args := query.parse("")
 	args = append(args, start, num)
 	query.result = query.dao.conn.Query(fmt.Sprint(sql, " LIMIT ?,?"), args...)
@@ -566,7 +568,7 @@ func (query *{{.TableName}}Query) QueryByPage(start, num int) *{{.TableName}}Que
 }
 
 {{ if .ValidSet }}
-func (query *{{.TableName}}Query) QueryAllByPage(start, num int) *{{.TableName}}Query {
+func (query *{{.FixedTableName}}Query) QueryAllByPage(start, num int) *{{.FixedTableName}}Query {
 	sql, args := query.parse("ALL")
 	args = append(args, start, num)
 	query.result = query.dao.conn.Query(fmt.Sprint(sql, " LIMIT ?,?"), args...)
@@ -575,7 +577,7 @@ func (query *{{.TableName}}Query) QueryAllByPage(start, num int) *{{.TableName}}
 {{ end }}
 
 {{ if .HasVersion }}
-func (query *{{.TableName}}Query) QueryByVersion(minVersion, maxVersion uint64) uint64 {
+func (query *{{.FixedTableName}}Query) QueryByVersion(minVersion, maxVersion uint64) uint64 {
 	if maxVersion == 0 {
 		if query.dao.rd != nil {
 			maxVersion = query.dao.rd.GET("_DATA_MAX_VERSION_{{.TableName}}").Uint64()
@@ -600,14 +602,14 @@ func (query *{{.TableName}}Query) QueryByVersion(minVersion, maxVersion uint64) 
 }
 {{ end }}
 
-func (query *{{.TableName}}Query) Result() *db.QueryResult {
+func (query *{{.FixedTableName}}Query) Result() *db.QueryResult {
 	if query.result == nil {
 		query.Query()
 	}
 	return query.result
 }
 
-func (query *{{.TableName}}Query) First() *{{.TableName}}Item {
+func (query *{{.FixedTableName}}Query) First() *{{.FixedTableName}}Item {
 	list := query.List()
 	if len(list) > 0 {
 		return &list[0]
@@ -615,16 +617,16 @@ func (query *{{.TableName}}Query) First() *{{.TableName}}Item {
 	return nil
 }
 
-func (query *{{.TableName}}Query) To(out interface{}) {
+func (query *{{.FixedTableName}}Query) To(out interface{}) {
 	query.to(out, "")
 }
 
 
-func (query *{{.TableName}}Query) ToWithoutPrefix(out interface{}, ignorePrefix string) {
+func (query *{{.FixedTableName}}Query) ToWithoutPrefix(out interface{}, ignorePrefix string) {
 	query.to(out, ignorePrefix)
 }
 
-func (query *{{.TableName}}Query) to(out interface{}, ignorePrefix string) {
+func (query *{{.FixedTableName}}Query) to(out interface{}, ignorePrefix string) {
 	if query.result == nil {
 		query.Query()
 	}
@@ -651,7 +653,7 @@ func (query *{{.TableName}}Query) to(out interface{}, ignorePrefix string) {
 	_ = query.result.To(out)
 }
 
-func (query *{{.TableName}}Query) ToByFields(out interface{}, fields ...string) {
+func (query *{{.FixedTableName}}Query) ToByFields(out interface{}, fields ...string) {
 	if query.result == nil {
 		query.Query()
 	}
@@ -671,12 +673,12 @@ func (query *{{.TableName}}Query) ToByFields(out interface{}, fields ...string) 
 	_ = query.result.To(out)
 }
 
-func (query *{{.TableName}}Query) List() []{{.TableName}}Item {
+func (query *{{.FixedTableName}}Query) List() []{{.FixedTableName}}Item {
 	if query.result == nil {
 		query.Query()
 	}
 
-	list := make([]{{.TableName}}Item, 0)
+	list := make([]{{.FixedTableName}}Item, 0)
 	_ = query.result.To(&list)
 	for i := range list {
 		list[i].dao = query.dao
@@ -684,7 +686,7 @@ func (query *{{.TableName}}Query) List() []{{.TableName}}Item {
 	return list
 }
 
-func (query *{{.TableName}}Query) ListBy(fields ...string) map[string]*{{.TableName}}Item {
+func (query *{{.FixedTableName}}Query) ListBy(fields ...string) map[string]*{{.FixedTableName}}Item {
 	if fields == nil || len(fields) == 0 {
 		fields = []string{ {{.IdFieldStringArgs}} }
 	}
@@ -693,8 +695,8 @@ func (query *{{.TableName}}Query) ListBy(fields ...string) map[string]*{{.TableN
 		query.Query()
 	}
 
-	out := make(map[string]*{{.TableName}}Item)
-	list := make([]{{.TableName}}Item, 0)
+	out := make(map[string]*{{.FixedTableName}}Item)
+	list := make([]{{.FixedTableName}}Item, 0)
 	_ = query.result.To(&list)
 	fieldIndexs := make([]int, len(fields))
 	for i, item := range list {
@@ -727,47 +729,47 @@ func (query *{{.TableName}}Query) ListBy(fields ...string) map[string]*{{.TableN
 	return out
 }
 
-func (query *{{.TableName}}Query) LastSql() *string {
+func (query *{{.FixedTableName}}Query) LastSql() *string {
 	if query.result != nil {
 		return query.result.Sql
 	}
 	return nil
 }
 
-func (query *{{.TableName}}Query) LastArgs() []interface{} {
+func (query *{{.FixedTableName}}Query) LastArgs() []interface{} {
 	if query.result != nil {
 		return query.result.Args
 	}
 	return nil
 }
 
-func (query *{{.TableName}}Query) LastError() error {
+func (query *{{.FixedTableName}}Query) LastError() error {
 	if query.result != nil {
 		return query.result.Error
 	}
 	return nil
 }
 
-type {{.TableName}}Item struct {
-	dao *{{.TableName}}Dao
+type {{.FixedTableName}}Item struct {
+	dao *{{.FixedTableName}}Dao
 {{range .Fields}}
 	{{.Name}} {{.Type}}{{ end }}
 }
 
 {{range .PointFields}}
-func (item *{{$.TableName}}Item) {{.Name}}Value() {{.Type}} {
+func (item *{{$.FixedTableName}}Item) {{.Name}}Value() {{.Type}} {
 	if item.{{.Name}} == nil {
 		return {{.Default}}
 	}
 	return *item.{{.Name}}
 }
 
-func (item *{{$.TableName}}Item) Set{{.Name}}(value {{.Type}}) {
+func (item *{{$.FixedTableName}}Item) Set{{.Name}}(value {{.Type}}) {
 	item.{{.Name}} = &value
 }
 {{ end }}
 
-func (item *{{.TableName}}Item) Save() bool {
+func (item *{{.FixedTableName}}Item) Save() bool {
 	if item.dao == nil {
 		log.DefaultLogger.Error("save item without dao", "dao", "{{.DBName}}", "table", "{{.TableName}}", "item", item)
 		return false
@@ -776,7 +778,7 @@ func (item *{{.TableName}}Item) Save() bool {
 }
 
 {{ if .InvalidSet }}
-func (item *{{.TableName}}Item) Enable() bool {
+func (item *{{.FixedTableName}}Item) Enable() bool {
 	if item.dao == nil {
 		log.DefaultLogger.Error("enable item without dao", "dao", "{{.DBName}}", "table", "{{.TableName}}", "item", item)
 		return false
@@ -784,7 +786,7 @@ func (item *{{.TableName}}Item) Enable() bool {
 	return item.dao.Enable({{.IdFieldItemArgs}})
 }
 
-func (item *{{.TableName}}Item) Disable() bool {
+func (item *{{.FixedTableName}}Item) Disable() bool {
 	if item.dao == nil {
 		log.DefaultLogger.Error("disable item without dao", "dao", "{{.DBName}}", "table", "{{.TableName}}", "item", item)
 		return false
@@ -792,7 +794,7 @@ func (item *{{.TableName}}Item) Disable() bool {
 	return item.dao.Disable({{.IdFieldItemArgs}})
 }
 {{ else }}
-func (item *{{.TableName}}Item) Delete() bool {
+func (item *{{.FixedTableName}}Item) Delete() bool {
 	if item.dao == nil {
 		log.DefaultLogger.Error("delete item without dao", "dao", "{{.DBName}}", "table", "{{.TableName}}", "item", item)
 		return false
@@ -801,23 +803,23 @@ func (item *{{.TableName}}Item) Delete() bool {
 }
 {{ end }}
 
-func (item *{{.TableName}}Item) SetByField(field string, value interface{}) {
+func (item *{{.FixedTableName}}Item) SetByField(field string, value interface{}) {
 	fieldValue := reflect.ValueOf(item).Elem().FieldByName(u.GetUpperName(field))
 	if fieldValue.IsValid() {
 		u.SetValue(fieldValue, reflect.ValueOf(value))
 	}
 }
 
-func (item *{{.TableName}}Item) ToWithoutPrefix(out interface{}, ignorePrefix string) {
+func (item *{{.FixedTableName}}Item) ToWithoutPrefix(out interface{}, ignorePrefix string) {
 	item.to(out, ignorePrefix)
 }
 
-func (item *{{.TableName}}Item) To(out interface{}) {
+func (item *{{.FixedTableName}}Item) To(out interface{}) {
 	item.to(out, "")
 }
 
 
-func (item *{{.TableName}}Item) to(out interface{}, ignorePrefix string) {
+func (item *{{.FixedTableName}}Item) to(out interface{}, ignorePrefix string) {
 	u.Convert(item, out)
 	ov := u.FinalValue(reflect.ValueOf(out))
 	if ov.Kind() == reflect.Struct {
@@ -1037,11 +1039,13 @@ func main() {
 				return
 			}
 			tables := make([]string, 0)
+			fixedTables := make([]string, 0)
 			for _, table := range r.StringsOnC1() {
 				if strings.HasPrefix(table, "_") || strings.HasPrefix(table, ".") {
 					continue
 				}
 				tables = append(tables, table)
+				fixedTables = append(fixedTables, strings.ToUpper(table[0:1])+table[1:])
 			}
 
 			dbName := conn.Config.DB
@@ -1054,6 +1058,7 @@ func main() {
 				DBName:       dbName,
 				VersionField: conf.VersionField,
 				Tables:       tables,
+				FixedTables:  fixedTables,
 			}
 			dbConfigFile := path.Join(dbPath, "daoConfig.go")
 			err := writeWithTpl(dbConfigFile, configTpl, daoData)
@@ -1067,7 +1072,8 @@ func main() {
 				fmt.Println(dbName, u.Green("OK"))
 			}
 
-			for _, table := range tables {
+			for i, table := range tables {
+				fixedTableName := fixedTables[i]
 				tableFile := path.Join(dbPath, table+".go")
 
 				descs := make([]TableDesc, 0)
@@ -1079,6 +1085,7 @@ func main() {
 				tableData := TableData{
 					DBName:            dbName,
 					TableName:         table,
+					FixedTableName:    fixedTableName,
 					IsAutoId:          false,
 					IdFieldWhere:      "",
 					IdFieldArgs:       "",
@@ -1143,8 +1150,8 @@ func main() {
 					//if desc.Null == "YES" || desc.Default != nil || desc.Extra == "auto_increment" {
 					if desc.Null == "YES" || desc.Extra == "auto_increment" {
 						tableData.PointFields = append(tableData.PointFields, FieldData{
-							Name: u.GetUpperName(desc.Field),
-							Type: typ,
+							Name:    u.GetUpperName(desc.Field),
+							Type:    typ,
 							Default: defaultValue,
 						})
 						typ = "*" + typ
