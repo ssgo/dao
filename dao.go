@@ -14,10 +14,12 @@ import (
 )
 
 type ValidFieldConfig struct {
-	Field        string
-	Type         string
-	ValidValue   string
-	InvalidValue string
+	Field           string
+	Type            string
+	ValidOperator   string
+	ValidValue      string
+	InvalidOperator string
+	InvalidValue    string
 }
 
 type DaoConfig struct {
@@ -339,29 +341,29 @@ func (dao *{{.FixedTableName}}Dao) commitVersion(version uint64) {
 
 func (dao *{{.FixedTableName}}Dao) NewQuery() *{{.FixedTableName}}Query {
 	return &{{.FixedTableName}}Query{
-		dao:          dao,
-		validWhere:   "{{.ValidWhere}}",
-		sql:          "",
-		fields:       "{{.SelectFields}}",
-		where:        "",
-		extraSql:       "",
-		args:         []interface{}{},
-		leftJoins:    []string{},
-		leftJoinArgs: []interface{}{},
+		dao:            dao,
+		validWhere:     "{{.ValidWhere}}",
+		sql:            "",
+		fields:         "{{.SelectFields}}",
+		where:          "",
+		extraSql:         "",
+		args:           []interface{}{},
+		leftJoins:      []string{},
+		leftJoinArgs:   []interface{}{},
 	}
 }
 
 type {{.FixedTableName}}Query struct {
-	dao          *{{.FixedTableName}}Dao
-	result       *db.QueryResult
-	validWhere   string
-	sql          string
-	fields       string
-	where        string
+	dao            *{{.FixedTableName}}Dao
+	result         *db.QueryResult
+	validWhere     string
+	sql            string
+	fields         string
+	where          string
 	extraSql       string
-	args         []interface{}
-	leftJoins    []string
-	leftJoinArgs []interface{}
+	args           []interface{}
+	leftJoins      []string
+	leftJoinArgs   []interface{}
 }
 
 func (query *{{.FixedTableName}}Query) parseFields(fields, table string) string {
@@ -539,7 +541,7 @@ func (query *{{.FixedTableName}}Query) Query() *{{.FixedTableName}}Query {
 }
 
 {{ if .ValidSet }}
-func (query *{{.FixedTableName}}Query) QueryAll() *{{.FixedTableName}}Query {
+func (query *{{.FixedTableName}}Query) QueryWithValid() *{{.FixedTableName}}Query {
 	sql, args := query.parse("ALL")
 	query.result = query.dao.conn.Query(sql, args...)
 	return query
@@ -568,7 +570,7 @@ func (query *{{.FixedTableName}}Query) QueryByPage(start, num int) *{{.FixedTabl
 }
 
 {{ if .ValidSet }}
-func (query *{{.FixedTableName}}Query) QueryAllByPage(start, num int) *{{.FixedTableName}}Query {
+func (query *{{.FixedTableName}}Query) QueryWithValidByPage(start, num int) *{{.FixedTableName}}Query {
 	sql, args := query.parse("ALL")
 	args = append(args, start, num)
 	query.result = query.dao.conn.Query(fmt.Sprint(sql, " LIMIT ?,?"), args...)
@@ -960,28 +962,36 @@ func main() {
 	if conf.ValidFields == nil {
 		conf.ValidFields = []ValidFieldConfig{
 			{
-				Field:        "status",
-				Type:         "tinyint",
-				ValidValue:   "1",
-				InvalidValue: "0",
+				Field:           "isValid",
+				Type:            "tinyint",
+				ValidOperator:   "!=",
+				ValidValue:      "0",
+				InvalidOperator: "=",
+				InvalidValue:    "0",
 			},
 			{
-				Field:        "isActive",
-				Type:         "tinyint",
-				ValidValue:   "Yes",
-				InvalidValue: "No",
+				Field:           "isActive",
+				Type:            "tinyint",
+				ValidOperator:   "!=",
+				ValidValue:      "0",
+				InvalidOperator: "=",
+				InvalidValue:    "0",
 			},
 			{
-				Field:        "isValid",
-				Type:         "tinyint",
-				ValidValue:   "1",
-				InvalidValue: "0",
+				Field:           "deleted",
+				Type:            "tinyint",
+				ValidOperator:   "=",
+				ValidValue:      "0",
+				InvalidOperator: "!=",
+				InvalidValue:    "0",
 			},
 			{
-				Field:        "deleted",
-				Type:         "tinyint",
-				ValidValue:   "0",
-				InvalidValue: "1",
+				Field:           "status",
+				Type:            "tinyint",
+				ValidOperator:   "!=",
+				ValidValue:      "0",
+				InvalidOperator: "=",
+				InvalidValue:    "0",
 			},
 		}
 	}
@@ -1120,9 +1130,9 @@ func main() {
 
 					for _, validFieldInfo := range conf.ValidFields {
 						if desc.Field == validFieldInfo.Field && strings.Contains(desc.Type, validFieldInfo.Type) {
-							tableData.ValidWhere = " AND `" + validFieldInfo.Field + "`=" + validFieldInfo.ValidValue
-							tableData.ValidSet = "`" + validFieldInfo.Field + "`=" + validFieldInfo.ValidValue
-							tableData.InvalidSet = "`" + validFieldInfo.Field + "`=" + validFieldInfo.InvalidValue
+							tableData.ValidWhere = " AND `" + validFieldInfo.Field + "`" + validFieldInfo.ValidOperator + validFieldInfo.ValidValue
+							tableData.ValidSet = "`" + validFieldInfo.Field + "`" + validFieldInfo.ValidOperator + validFieldInfo.ValidValue
+							tableData.InvalidSet = "`" + validFieldInfo.Field + "`" + validFieldInfo.InvalidOperator + validFieldInfo.InvalidValue
 						}
 					}
 
