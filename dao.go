@@ -58,6 +58,7 @@ import (
 	"github.com/ssgo/log"
 	"github.com/ssgo/redis"
 	"github.com/ssgo/s"
+	"time"
 )
 
 var _conn *db.DB
@@ -95,12 +96,76 @@ func NewTransaction(logger *log.Logger) *db.Tx {
 	return _conn.Begin()
 }
 
+type Datetime string
+type Time string
+type Date string
+
+func DatetimeByString(s string) Datetime {
+	return Datetime(s)
+}
+func DatetimeByTime(t time.Time) Datetime {
+	return Datetime(t.Format("2006-01-02 15:04:05"))
+}
+func (dt *Datetime) String() string {
+	return string(*dt)
+}
+func (dt *Datetime) Time() time.Time {
+	if t, err := time.Parse("2006-01-02 15:04:05", dt.String()); err == nil {
+		return t
+	} else {
+		return time.Unix(0, 0)
+	}
+}
+
+func TimeByString(s string) Time {
+	return Time(s)
+}
+func TimeByTime(t time.Time) Time {
+	return Time(t.Format("15:04:05"))
+}
+func (dt *Time) String() string {
+	return string(*dt)
+}
+func (dt *Time) Time() time.Time {
+	if t, err := time.Parse("15:04:05", dt.String()); err == nil {
+		return t
+	} else {
+		return time.Unix(0, 0)
+	}
+}
+
+func DateByString(s string) Date {
+	return Date(s)
+}
+func DateByTime(t time.Time) Date {
+	return Date(t.Format("2006-01-02"))
+}
+func (dt *Date) String() string {
+	return string(*dt)
+}
+func (dt *Date) Time() time.Time {
+	if t, err := time.Parse("2006-01-02", dt.String()); err == nil {
+		return t
+	} else {
+		return time.Unix(0, 0)
+	}
+}
+
 `
+
+//type AA string
+//
+//const (
+//	A1 AA = "111"
+//	A2 AA = "222"
+//)
+
 
 type FieldData struct {
 	Name    string
 	Type    string
 	Default string
+	Options map[string]string
 }
 
 type IndexField struct {
@@ -269,7 +334,11 @@ func (dao *{{.FixedTableName}}Dao) GetWithInvalid({{.PrimaryKey.Params}}) *{{.Fi
 
 {{ end }}
 
+{{ if .IsAutoId }}
+func (dao *{{.FixedTableName}}Dao) Insert(item *{{.FixedTableName}}Item) (int64, bool) {
+{{ else }}
 func (dao *{{.FixedTableName}}Dao) Insert(item *{{.FixedTableName}}Item) bool {
+{{ end }}
 {{ if .HasVersion }}
 	item.Version = dao.getVersion()
 {{ end }}
@@ -283,7 +352,11 @@ func (dao *{{.FixedTableName}}Dao) Insert(item *{{.FixedTableName}}Item) bool {
 	dao.commitVersion(item.Version)
 {{ end }}
 	dao.lastError = r.Error
+{{ if .IsAutoId }}
+	return r.Id(), r.Error == nil && r.Changes() > 0
+{{ else }}
 	return r.Error == nil && r.Changes() > 0
+{{ end }}
 }
 
 func (dao *{{.FixedTableName}}Dao) Replace(item *{{.FixedTableName}}Item) bool {
@@ -370,7 +443,8 @@ func (dao *{{.FixedTableName}}Dao) Disable({{.PrimaryKey.Params}}) bool {
 	dao.lastError = r.Error
 	return r.Error == nil && r.Changes() > 0
 }
-{{ else }}
+{{ end }}
+
 func (dao *{{.FixedTableName}}Dao) Delete({{.PrimaryKey.Params}}) bool {
 	var r *db.ExecResult
 	if dao.tx != nil {
@@ -381,7 +455,6 @@ func (dao *{{.FixedTableName}}Dao) Delete({{.PrimaryKey.Params}}) bool {
 	dao.lastError = r.Error
 	return r.Error == nil && r.Changes() > 0
 }
-{{ end }}
 
 {{ end }}
 
@@ -846,11 +919,13 @@ func (query *{{.FixedTableName}}Query) List() []{{.FixedTableName}}Item {
 	return list
 }
 
-{{ if .PrimaryKey }}
-
 func (query *{{.FixedTableName}}Query) ListBy(fields ...string) map[string]*{{.FixedTableName}}Item {
 	if fields == nil || len(fields) == 0 {
+{{ if .PrimaryKey }}
 		fields = []string{ {{.PrimaryKey.StringArgs}} }
+{{ else }}
+		fields = make([]string, 0)
+{{ end }}
 	}
 
 	if query.result == nil {
@@ -891,8 +966,6 @@ func (query *{{.FixedTableName}}Query) ListBy(fields ...string) map[string]*{{.F
 	return out
 }
 
-{{ end }}
-
 func (query *{{.FixedTableName}}Query) LastSql() *string {
 	if query.result != nil {
 		return query.result.Sql
@@ -913,6 +986,15 @@ func (query *{{.FixedTableName}}Query) LastError() error {
 	}
 	return nil
 }
+
+{{range .Fields}}{{ if .Options }}
+type {{.Type}} string
+{{$typ := .Type}}
+const (
+{{range $k, $v := .Options}}
+	{{$k}} {{$typ}} = "{{$v}}"{{ end }}
+)
+{{ end }}{{ end }}
 
 type {{.FixedTableName}}Item struct {
 	dao *{{.FixedTableName}}Dao
@@ -1256,6 +1338,7 @@ func main() {
 				fmt.Println(dbName, u.Green("OK"))
 			}
 
+			enumTypeExists := map[string]bool{}
 			for i, table := range tables {
 				fixedTableName := fixedTables[i]
 				tableFile := path.Join(dbPath, "a_"+table+".go")
@@ -1320,6 +1403,7 @@ func main() {
 
 					typ := ""
 					defaultValue := "0"
+					options := map[string]string{}
 					if strings.Contains(desc.Type, "bigint") {
 						typ = "int64"
 					} else if strings.Contains(desc.Type, "int") {
@@ -1328,6 +1412,28 @@ func main() {
 						typ = "float32"
 					} else if strings.Contains(desc.Type, "double") {
 						typ = "float64"
+					} else if desc.Type == "datetime" {
+						typ = "Datetime"
+						defaultValue = "\"0000-00-00 00:00:00\""
+					} else if desc.Type == "date" {
+						typ = "Date"
+						defaultValue = "\"0000-00-00\""
+					} else if desc.Type == "time" {
+						typ = "Time"
+						defaultValue = "\"00:00:00\""
+					} else if strings.HasPrefix(desc.Type, "enum(") {
+						typ = u.GetUpperName(desc.Field)
+						if !enumTypeExists[typ] {
+							enumTypeExists[typ] = true
+							a := u.SplitWithoutNone(desc.Type[5:len(desc.Type)-1], ",")
+							for _, v := range a {
+								if strings.HasPrefix(v, "'") && strings.HasSuffix(v, "'") {
+									v = v[1 : len(v)-1]
+								}
+								options[typ+u.GetUpperName(v)] = v
+							}
+						}
+						defaultValue = "\"\""
 					} else {
 						typ = "string"
 						defaultValue = "\"\""
@@ -1343,12 +1449,15 @@ func main() {
 							Name:    u.GetUpperName(desc.Field),
 							Type:    typ,
 							Default: defaultValue,
+							Options: options,
 						})
 						typ = "*" + typ
 					}
 					tableData.Fields = append(tableData.Fields, FieldData{
-						Name: u.GetUpperName(desc.Field),
-						Type: typ,
+						Name:    u.GetUpperName(desc.Field),
+						Type:    typ,
+						Default: defaultValue,
+						Options: options,
 					})
 					//if desc.Key != "PRI" {
 					//	tableData.FieldsWithoutAutoId = append(tableData.FieldsWithoutAutoId, FieldData{
@@ -1406,11 +1515,11 @@ func main() {
 						// 唯一索引和普通索引中都不存在时创建
 						if tableData.UniqueKeys[k2] == nil && tableData.IndexKeys[k2] == nil {
 							tableData.IndexKeys[k2] = &IndexField{
-								Name: name2,
-								Where: "(`" + strings.Join(idFields[0:i+1], "`=? AND `") + "`=?)",
-								Args: strings.Join(idFields[0:i+1], ", "),
-								Params: strings.Join(idFieldParams[0:i+1], ", "),
-								ItemArgs: strings.Join(idFieldItemArgs[0:i+1], ", "),
+								Name:       name2,
+								Where:      "(`" + strings.Join(idFields[0:i+1], "`=? AND `") + "`=?)",
+								Args:       strings.Join(idFields[0:i+1], ", "),
+								Params:     strings.Join(idFieldParams[0:i+1], ", "),
+								ItemArgs:   strings.Join(idFieldItemArgs[0:i+1], ", "),
 								StringArgs: "\"" + strings.Join(idFields[0:i+1], "\", \"") + "\"",
 							}
 						}
@@ -1422,11 +1531,11 @@ func main() {
 					k1 := "Unique_" + name1
 					if tableData.UniqueKeys[k1] == nil {
 						tableData.UniqueKeys[k1] = &IndexField{
-							Name: name1,
-							Where: "(`" + strings.Join(fieldNames, "`=? AND `") + "`=?)",
-							Args: strings.Join(fieldNames, ", "),
-							Params: strings.Join(uniqueFieldParams[k], ", "),
-							ItemArgs: strings.Join(uniqueFieldItemArgs[k], ", "),
+							Name:       name1,
+							Where:      "(`" + strings.Join(fieldNames, "`=? AND `") + "`=?)",
+							Args:       strings.Join(fieldNames, ", "),
+							Params:     strings.Join(uniqueFieldParams[k], ", "),
+							ItemArgs:   strings.Join(uniqueFieldItemArgs[k], ", "),
 							StringArgs: "\"" + strings.Join(fieldNames, "\", \"") + "\"",
 						}
 					}
@@ -1438,11 +1547,11 @@ func main() {
 						// 唯一索引和普通索引中都不存在时创建
 						if tableData.UniqueKeys[k2] == nil && tableData.IndexKeys[k2] == nil {
 							tableData.IndexKeys[k2] = &IndexField{
-								Name: name2,
-								Where: "(`" + strings.Join(fieldNames[0:i+1], "`=? AND `") + "`=?)",
-								Args: strings.Join(fieldNames[0:i+1], ", "),
-								Params: strings.Join(uniqueFieldParams[k][0:i+1], ", "),
-								ItemArgs: strings.Join(uniqueFieldItemArgs[k][0:i+1], ", "),
+								Name:       name2,
+								Where:      "(`" + strings.Join(fieldNames[0:i+1], "`=? AND `") + "`=?)",
+								Args:       strings.Join(fieldNames[0:i+1], ", "),
+								Params:     strings.Join(uniqueFieldParams[k][0:i+1], ", "),
+								ItemArgs:   strings.Join(uniqueFieldItemArgs[k][0:i+1], ", "),
 								StringArgs: "\"" + strings.Join(fieldNames[0:i+1], "\", \"") + "\"",
 							}
 						}
@@ -1457,11 +1566,11 @@ func main() {
 						// 唯一索引和普通索引中都不存在时创建
 						if tableData.UniqueKeys[k2] == nil && tableData.IndexKeys[k2] == nil {
 							tableData.IndexKeys[k2] = &IndexField{
-								Name: name,
-								Where: "(`" + strings.Join(fieldNames[0:i+1], "`=? AND `") + "`=?)",
-								Args: strings.Join(fieldNames[0:i+1], ", "),
-								Params: strings.Join(indexFieldParams[k][0:i+1], ", "),
-								ItemArgs: strings.Join(indexFieldItemArgs[k][0:i+1], ", "),
+								Name:       name,
+								Where:      "(`" + strings.Join(fieldNames[0:i+1], "`=? AND `") + "`=?)",
+								Args:       strings.Join(fieldNames[0:i+1], ", "),
+								Params:     strings.Join(indexFieldParams[k][0:i+1], ", "),
+								ItemArgs:   strings.Join(indexFieldItemArgs[k][0:i+1], ", "),
 								StringArgs: "\"" + strings.Join(fieldNames[0:i+1], "\", \"") + "\"",
 							}
 						}
