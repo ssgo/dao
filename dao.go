@@ -894,13 +894,21 @@ func (query *{{.FixedTableName}}Query) ToByFields(out interface{}, fields ...str
 	v := reflect.ValueOf(out)
 	if v.Kind() == reflect.Ptr {
 		v = v.Elem()
-		if v.Type().Kind() == reflect.Map && v.Type().Elem().Kind() == reflect.Struct {
-			for key, item := range query.ListBy(fields...) {
-				newItem := reflect.New(v.Type().Elem())
-				item.To(newItem.Interface())
-				v.SetMapIndex(reflect.ValueOf(key), newItem.Elem())
+		if v.Type().Kind() == reflect.Map {
+			if v.Type().Elem().Kind() == reflect.Struct || (v.Type().Elem().Kind() == reflect.Ptr && v.Type().Elem().Elem().Kind() == reflect.Struct) {
+				for key, item := range query.ListBy(fields...) {
+					if v.Type().Elem().Kind() == reflect.Ptr {
+						newItem := reflect.New(v.Type().Elem().Elem())
+						item.To(newItem.Interface())
+						v.SetMapIndex(reflect.ValueOf(key), newItem)
+					} else {
+						newItem := reflect.New(v.Type().Elem())
+						item.To(newItem.Interface())
+						v.SetMapIndex(reflect.ValueOf(key), newItem.Elem())
+					}
+				}
+				return
 			}
-			return
 		}
 	}
 	_ = query.result.To(out)
