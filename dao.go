@@ -654,8 +654,11 @@ func (query *{{.FixedTableName}}Query) Where(where string, args ...interface{}) 
 }
 
 func (query *{{.FixedTableName}}Query) In(field string, values ...interface{}) *{{.FixedTableName}}Query {
+	if !strings.Contains(field, "` + "`" + `") {
+		field = "` + "`" + `"+field+"` + "`" + `"
+	}
 	values = query.fixArgs(values)
-	query.where = "` + "`" + `"+field+"` + "`" + ` IN "+query.dao.conn.InKeys(len(values))
+	query.where = field+" IN "+query.dao.conn.InKeys(len(values))
 	query.args = values
 	return query
 }
@@ -681,21 +684,27 @@ func (query *{{.FixedTableName}}Query) Or(where string, args ...interface{}) *{{
 }
 
 func (query *{{.FixedTableName}}Query) AndIn(field string, values ...interface{}) *{{.FixedTableName}}Query {
+	if !strings.Contains(field, "` + "`" + `") {
+		field = "` + "`" + `"+field+"` + "`" + `"
+	}
 	values = query.fixArgs(values)
 	if query.where != "" {
 		query.where += " AND "
 	}
-	query.where += "` + "`" + `"+field+"` + "`" + ` IN "+query.dao.conn.InKeys(len(values))
+	query.where += field + " IN "+query.dao.conn.InKeys(len(values))
 	query.args = append(query.args, values...)
 	return query
 }
 
 func (query *{{.FixedTableName}}Query) OrIn(field string, values ...interface{}) *{{.FixedTableName}}Query {
+	if !strings.Contains(field, "` + "`" + `") {
+		field = "` + "`" + `"+field+"` + "`" + `"
+	}
 	values = query.fixArgs(values)
 	if query.where != "" {
 		query.where += " OR "
 	}
-	query.where += "` + "`" + `"+field+"` + "`" + ` IN "+query.dao.conn.InKeys(len(values))
+	query.where += field + " IN "+query.dao.conn.InKeys(len(values))
 	query.args = append(query.args, values...)
 	return query
 }
@@ -719,7 +728,9 @@ func (query *{{.FixedTableName}}Query) LeftJoin(joinTable, fields, on string, ar
 	if !strings.Contains(query.fields, "` + "`" + `{{.TableName}}` + "`" + `.") {
 		query.fields = "` + "`" + `{{.TableName}}` + "`" + `."+strings.ReplaceAll(query.fields, "` + "`" + `, ` + "`" + `", "` + "`" + `, ` + "`" + `{{.TableName}}` + "`" + `.` + "`" + `")
 	}
-	query.fields += ", "+query.parseFields(fields, joinTable)
+	if fields != "" {
+		query.fields += ", "+query.parseFields(fields, joinTable)
+	}
 
 	query.leftJoins = append(query.leftJoins, fmt.Sprint("LEFT JOIN ` + "`" + `", joinTable, "` + "`" + ` ON ", on))
 	query.leftJoinArgs = append(query.leftJoinArgs, args...)
