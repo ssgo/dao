@@ -8,39 +8,30 @@ import (
 	"time"
 )
 
-var _conn *db.DB
-var _rd *redis.Redis
 
-func ConfigureDB(dsn string) {
-	_conn = db.GetDB(dsn, nil)
+type Serve struct {
+	conn *db.DB
+	rd   *redis.Redis
 }
 
-func ConfigureRedis(dsn string) {
-	_rd = redis.GetRedis(dsn, nil)
+func New(dbConn *db.DB, redisConn *redis.Redis) *Serve {
+	serve := Serve{
+		conn: dbConn,
+		rd:   redisConn,
+	}
+	return &serve
 }
 
-func ConfigureInjects() {
+func (serve *Serve) SetInject() {
 	{{range .FixedTables}}
-	s.SetInject(&{{.}}Dao{conn: _conn, rd: _rd}){{end}}
+	s.SetInject(&{{.}}Dao{conn: serve.conn, rd: serve.rd}){{end}}
 }
 
-func Configure(dbPool *db.DB, redisPool *redis.Redis, inject bool) {
-	if dbPool != nil {
-		_conn = dbPool
-	}
-	if redisPool != nil {
-		_rd = redisPool
-	}
-	if inject {
-		ConfigureInjects()
-	}
-}
-
-func NewTransaction(logger *log.Logger) *db.Tx {
+func (serve *Serve) NewTransaction(logger *log.Logger) *db.Tx {
 	if logger != nil {
-		return _conn.CopyByLogger(logger).Begin()
+		return serve.conn.CopyByLogger(logger).Begin()
 	}
-	return _conn.Begin()
+	return serve.conn.Begin()
 }
 
 type Datetime string
