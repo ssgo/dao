@@ -5,6 +5,7 @@ import (
 	"fmt"
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/ssgo/db"
+	"github.com/ssgo/log"
 	"github.com/ssgo/u"
 	"io/ioutil"
 	"os"
@@ -38,6 +39,7 @@ type TableDesc struct {
 	Key     string
 	Default *string
 	Extra   string
+	After   string
 }
 
 type TableIndex struct {
@@ -59,6 +61,9 @@ var configTpl string // 当前目录，解析为string类型
 
 //go:embed a_table.go.tpl
 var tableTpl string // 当前目录，解析为string类型
+
+//go:embed a_er.html
+var erTpl string // 当前目录，解析为string类型
 
 //type AA string
 //
@@ -114,11 +119,13 @@ type FindingDBConfig struct {
 func getDBs(args []string) []string {
 	dbs := make([]string, 0)
 	filters := make(map[string]bool)
-	for i := 2; i < len(args); i++ {
-		if strings.Contains(args[i], "://") {
-			dbs = append(dbs, args[i])
-		} else {
-			filters[args[i]] = true
+	if args != nil {
+		for i := 0; i < len(args); i++ {
+			if strings.Contains(args[i], "://") {
+				dbs = append(dbs, args[i])
+			} else {
+				filters[args[i]] = true
+			}
 		}
 	}
 	if len(dbs) == 0 || len(filters) > 0 {
@@ -187,6 +194,22 @@ func getDBs(args []string) []string {
 	return dbs
 }
 
+func fixParamName(in string) string {
+	switch in {
+	case "type":
+		return "typ"
+	}
+	return in
+}
+
+func fixJoinParams(elems []string, sep string) string {
+	a := make([]string, len(elems))
+	for i := len(elems) - 1; i >= 0; i-- {
+		a[i] = fixParamName(elems[i])
+	}
+	return strings.Join(a, sep)
+}
+
 func main() {
 	if len(os.Args) == 1 {
 		printUsage()
@@ -198,7 +221,13 @@ func main() {
 		_ = u.LoadYaml("dao.yml", &conf)
 	}
 	if conf.Db == nil {
-		conf.Db = getDBs(os.Args)
+		if os.Args[1] == "-i" && len(os.Args) > 3 {
+			conf.Db = getDBs(os.Args[3:])
+		} else if len(os.Args) > 2 {
+			conf.Db = getDBs(os.Args[2:])
+		} else {
+			conf.Db = getDBs(nil)
+		}
 	}
 	if conf.VersionField == "" {
 		conf.VersionField = "version"
@@ -495,7 +524,7 @@ func main() {
 					if index.Key_name == "PRIMARY" {
 						idFields = append(idFields, index.Column_name)
 						idFieldsUpper = append(idFieldsUpper, u.GetUpperName(index.Column_name))
-						idFieldParams = append(idFieldParams, index.Column_name+" "+fieldTypesForId[index.Column_name])
+						idFieldParams = append(idFieldParams, fixParamName(index.Column_name)+" "+fieldTypesForId[index.Column_name])
 						idFieldItemArgs = append(idFieldItemArgs, u.StringIf(tableData.IsAutoId, "*", "")+"item."+u.GetUpperName(index.Column_name))
 					} else if index.Non_unique == 0 {
 						if uniqueFields[index.Key_name] == nil {
@@ -506,7 +535,7 @@ func main() {
 						}
 						uniqueFields[index.Key_name] = append(uniqueFields[index.Key_name], index.Column_name)
 						uniqueFieldsUpper[index.Key_name] = append(uniqueFieldsUpper[index.Key_name], u.GetUpperName(index.Column_name))
-						uniqueFieldParams[index.Key_name] = append(uniqueFieldParams[index.Key_name], index.Column_name+" "+fieldTypesForId[index.Column_name])
+						uniqueFieldParams[index.Key_name] = append(uniqueFieldParams[index.Key_name], fixParamName(index.Column_name)+" "+fieldTypesForId[index.Column_name])
 						uniqueFieldItemArgs[index.Key_name] = append(uniqueFieldItemArgs[index.Key_name], u.StringIf(tableData.IsAutoId, "*", "")+"item."+u.GetUpperName(index.Column_name))
 					} else {
 						if indexFields[index.Key_name] == nil {
@@ -517,7 +546,7 @@ func main() {
 						}
 						indexFields[index.Key_name] = append(indexFields[index.Key_name], index.Column_name)
 						indexFieldsUpper[index.Key_name] = append(indexFieldsUpper[index.Key_name], u.GetUpperName(index.Column_name))
-						indexFieldParams[index.Key_name] = append(indexFieldParams[index.Key_name], index.Column_name+" "+fieldTypesForId[index.Column_name])
+						indexFieldParams[index.Key_name] = append(indexFieldParams[index.Key_name], fixParamName(index.Column_name)+" "+fieldTypesForId[index.Column_name])
 						indexFieldItemArgs[index.Key_name] = append(indexFieldItemArgs[index.Key_name], u.StringIf(tableData.IsAutoId, "*", "")+"item."+u.GetUpperName(index.Column_name))
 					}
 				}
@@ -527,10 +556,10 @@ func main() {
 					tableData.PrimaryKey = &IndexField{
 						Name:       strings.Join(idFieldsUpper, ""),
 						Where:      "(`" + strings.Join(idFields, "`=? AND `") + "`=?)",
-						Args:       strings.Join(idFields, ", "),
-						Params:     strings.Join(idFieldParams, ", "),
+						Args:       fixJoinParams(idFields, ", "),
+						Params:     fixJoinParams(idFieldParams, ", "),
 						ItemArgs:   strings.Join(idFieldItemArgs, ", "),
-						StringArgs: "\"" + strings.Join(idFields, "\", \"") + "\"",
+						StringArgs: "\"" + fixJoinParams(idFields, "\", \"") + "\"",
 					}
 
 					// 将复合主键中的索引添加到 NewQuery().ByXXX
@@ -542,10 +571,10 @@ func main() {
 							tableData.IndexKeys[k2] = &IndexField{
 								Name:       name2,
 								Where:      "(`" + strings.Join(idFields[0:i+1], "`=? AND `") + "`=?)",
-								Args:       strings.Join(idFields[0:i+1], ", "),
-								Params:     strings.Join(idFieldParams[0:i+1], ", "),
+								Args:       fixJoinParams(idFields[0:i+1], ", "),
+								Params:     fixJoinParams(idFieldParams[0:i+1], ", "),
 								ItemArgs:   strings.Join(idFieldItemArgs[0:i+1], ", "),
-								StringArgs: "\"" + strings.Join(idFields[0:i+1], "\", \"") + "\"",
+								StringArgs: "\"" + fixJoinParams(idFields[0:i+1], "\", \"") + "\"",
 							}
 						}
 					}
@@ -558,10 +587,10 @@ func main() {
 						tableData.UniqueKeys[k1] = &IndexField{
 							Name:       name1,
 							Where:      "(`" + strings.Join(fieldNames, "`=? AND `") + "`=?)",
-							Args:       strings.Join(fieldNames, ", "),
-							Params:     strings.Join(uniqueFieldParams[k], ", "),
+							Args:       fixJoinParams(fieldNames, ", "),
+							Params:     fixJoinParams(uniqueFieldParams[k], ", "),
 							ItemArgs:   strings.Join(uniqueFieldItemArgs[k], ", "),
-							StringArgs: "\"" + strings.Join(fieldNames, "\", \"") + "\"",
+							StringArgs: "\"" + fixJoinParams(fieldNames, "\", \"") + "\"",
 						}
 					}
 
@@ -574,10 +603,10 @@ func main() {
 							tableData.IndexKeys[k2] = &IndexField{
 								Name:       name2,
 								Where:      "(`" + strings.Join(fieldNames[0:i+1], "`=? AND `") + "`=?)",
-								Args:       strings.Join(fieldNames[0:i+1], ", "),
-								Params:     strings.Join(uniqueFieldParams[k][0:i+1], ", "),
+								Args:       fixJoinParams(fieldNames[0:i+1], ", "),
+								Params:     fixJoinParams(uniqueFieldParams[k][0:i+1], ", "),
 								ItemArgs:   strings.Join(uniqueFieldItemArgs[k][0:i+1], ", "),
-								StringArgs: "\"" + strings.Join(fieldNames[0:i+1], "\", \"") + "\"",
+								StringArgs: "\"" + fixJoinParams(fieldNames[0:i+1], "\", \"") + "\"",
 							}
 						}
 					}
@@ -593,10 +622,10 @@ func main() {
 							tableData.IndexKeys[k2] = &IndexField{
 								Name:       name,
 								Where:      "(`" + strings.Join(fieldNames[0:i+1], "`=? AND `") + "`=?)",
-								Args:       strings.Join(fieldNames[0:i+1], ", "),
-								Params:     strings.Join(indexFieldParams[k][0:i+1], ", "),
+								Args:       fixJoinParams(fieldNames[0:i+1], ", "),
+								Params:     fixJoinParams(indexFieldParams[k][0:i+1], ", "),
 								ItemArgs:   strings.Join(indexFieldItemArgs[k][0:i+1], ", "),
-								StringArgs: "\"" + strings.Join(fieldNames[0:i+1], "\", \"") + "\"",
+								StringArgs: "\"" + fixJoinParams(fieldNames[0:i+1], "\", \"") + "\"",
 							}
 						}
 					}
@@ -610,6 +639,249 @@ func main() {
 					fmt.Println(" -", table, u.Green("OK"))
 				}
 			}
+		}
+
+	case "-i":
+		if conf.Db == nil || len(conf.Db) == 0 {
+			fmt.Println("no dsn found")
+			printUsage()
+			return
+		}
+
+		erInFile := "er.txt"
+		if len(os.Args) > 2 {
+			erInFile = os.Args[2]
+		}
+		if !u.FileExists(erInFile) {
+			fmt.Println(erInFile + " not found")
+			printUsage()
+			return
+		}
+
+		type ERGroup struct {
+			Name   string
+			Tables []*TableStruct
+		}
+
+		//tablesByGroup := map[string]map[string]*TableStruct{}
+		tablesByGroup := make([]*ERGroup, 0)
+		//tables := map[string]*TableStruct{}
+		//	lastGroupName := "default"
+		var lastGroup *ERGroup
+		lastTableName := ""
+		var lastTable *TableStruct
+		lastTableComment := ""
+		spliter := regexp.MustCompile(`\s+`)
+		wnMatcher := regexp.MustCompile(`^([a-zA-Z]+)([0-9]+)$`)
+		lines, _ := u.ReadFileLines(erInFile)
+		for _, line := range lines {
+			line = strings.TrimSpace(line)
+			lc := strings.SplitN(line, "//", 2)
+			comment := ""
+			if len(lc) == 2 {
+				line = strings.TrimSpace(lc[0])
+				comment = strings.TrimSpace(lc[1])
+			}
+			if line == "" {
+				if comment != "" {
+					//lastGroupName = comment
+					lastGroup = &ERGroup{
+						Name:   comment,
+						Tables: make([]*TableStruct, 0),
+					}
+					tablesByGroup = append(tablesByGroup, lastGroup)
+				}
+				continue
+			}
+
+			a := spliter.Split(line, 10)
+			if len(a) == 1 {
+				lastTableName = a[0]
+				lastTableComment = comment
+				lastTable = &TableStruct{
+					Name:    lastTableName,
+					Comment: lastTableComment,
+					Fields:  make([]TableField, 0),
+				}
+				if lastGroup == nil {
+					lastGroup = &ERGroup{
+						Name:   "Default",
+						Tables: make([]*TableStruct, 0),
+					}
+					tablesByGroup = append(tablesByGroup, lastGroup)
+				}
+				lastGroup.Tables = append(lastGroup.Tables, lastTable)
+				//if tablesByGroup[lastGroupName] == nil {
+				//	tablesByGroup[lastGroupName] = map[string]*TableStruct{}
+				//}
+				//tablesByGroup[lastGroupName][lastTableName] = lastTable
+			} else if lastTableName != "" {
+				field := TableField{
+					Name:       a[0],
+					Type:       "",
+					Index:      "",
+					IndexGroup: "",
+					Default:    "",
+					Comment:    comment,
+					Null:       "NOT NULL",
+					Extra:      "",
+					Desc:       "",
+				}
+
+				for i := 1; i < len(a); i++ {
+					wn := wnMatcher.FindStringSubmatch(a[i])
+					tag := a[i]
+					size := 0
+					if wn != nil {
+						tag = wn[1]
+						size = u.Int(wn[2])
+					}
+					switch tag {
+					case "PK":
+						field.Index = "pk"
+						field.Null = "NOT NULL"
+					case "I":
+						field.Index = "index"
+					case "AI":
+						field.Extra = "AUTO_INCREMENT"
+						field.Index = "pk"
+					case "TI":
+						field.Index = "fulltext"
+					case "U":
+						field.Index = "unique"
+					case "ct":
+						field.Default = "CURRENT_TIMESTAMP"
+					case "ctu":
+						field.Default = "CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP"
+					case "n":
+						field.Null = "NULL"
+					case "nn":
+						field.Null = "NOT NULL"
+					case "c":
+						field.Type = "char"
+					case "v":
+						field.Type = "varchar"
+					case "dt":
+						field.Type = "datetime"
+					case "d":
+						field.Type = "date"
+					case "tm":
+						field.Type = "time"
+					case "i":
+						field.Type = "int"
+					case "ui":
+						field.Type = "int unsigned"
+					case "ti":
+						field.Type = "tinyint"
+					case "uti":
+						field.Type = "tinyint unsigned"
+					case "b":
+						field.Type = "tinyint unsigned"
+					case "bi":
+						field.Type = "bigint"
+					case "ubi":
+						field.Type = "bigint unsigned"
+					case "f":
+						field.Type = "float"
+					case "uf":
+						field.Type = "float unsigned"
+					case "ff":
+						field.Type = "double"
+					case "uff":
+						field.Type = "double unsigned"
+					case "si":
+						field.Type = "smallint"
+					case "usi":
+						field.Type = "smallint unsigned"
+					case "mi":
+						field.Type = "middleint"
+					case "umi":
+						field.Type = "middleint unsigned"
+					case "t":
+						field.Type = "text"
+					case "bb":
+						field.Type = "blob"
+					default:
+					}
+
+					if size > 0 {
+						switch tag {
+						case "I":
+							// 索引分组
+							field.Index = "index"
+							field.IndexGroup = u.String(size)
+						case "U":
+							// 唯一索引分组
+							field.Index = "unique"
+							field.IndexGroup = u.String(size)
+						default:
+							// 带长度的类型
+							field.Type += fmt.Sprintf("(%d)", size)
+						}
+					}
+				}
+				lastTable.Fields = append(lastTable.Fields, field)
+			}
+		}
+
+		//fmt.Println(u.JsonP(tables), ".")
+
+		logger := log.DefaultLogger
+		conn := db.GetDB(conf.Db[0], logger)
+		for _, group := range tablesByGroup {
+			fmt.Println(u.Yellow(group.Name))
+			for _, table := range group.Tables {
+				err := CheckTable(conn, table, logger)
+				if err != nil {
+					fmt.Println("  -", table.Name, table.Comment, u.BRed(err.Error()))
+				} else {
+					fmt.Println("  -", table.Name, table.Comment, u.BGreen("OK"))
+				}
+			}
+		}
+
+		// 创建ER图文件
+
+		erOutFile := ""
+		extName := path.Ext(erInFile)
+		if extName != "" {
+			erOutFile = erInFile[0:len(erInFile)-len(extName)] + ".html"
+		} else {
+			erOutFile = erInFile + ".html"
+		}
+		//fmt.Println(u.JsonP(tablesByGroup), 111)
+		tpl := template.New(erOutFile).Funcs(template.FuncMap{
+			"short": func(in string) string {
+				switch in {
+				case "NULL":
+					return "n"
+				case "NOT NULL":
+					return "nn"
+				case "AUTO_INCREMENT":
+					return "ai"
+				case "CURRENT_TIMESTAMP":
+					return "ct"
+				case "CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP":
+					return "ctu"
+				}
+				return in
+			},
+		})
+		var err error
+		tpl, err = tpl.Parse(erTpl)
+		if err == nil {
+			var fp *os.File
+			fp, err = os.OpenFile(erOutFile, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0666)
+			if err == nil {
+				err = tpl.Execute(fp, map[string]interface{}{
+					"title":  conn.Config.DB,
+					"groups": tablesByGroup,
+				})
+				_ = fp.Close()
+			}
+		}
+		if err != nil {
+			fmt.Println(err.Error())
 		}
 	default:
 		printUsage()
@@ -641,8 +913,9 @@ func writeWithTpl(filename, tplContent string, data interface{}) error {
 func printUsage() {
 	fmt.Println("Usage:")
 	fmt.Println("	dao")
-	fmt.Println("	" + u.Cyan("-t  [dsn]") + "	" + u.White("测试数据库连接，并检查已经生成的对象"))
-	fmt.Println("	" + u.Cyan("-u  [dsn]") + "	" + u.White("从数据库创建或更新DAO对象"))
+	fmt.Println("	" + u.Cyan("-t [dsn]") + "	" + u.White("测试数据库连接，并检查已经生成的对象"))
+	fmt.Println("	" + u.Cyan("-u [dsn]") + "	" + u.White("从数据库创建或更新DAO对象"))
+	fmt.Println("	" + u.Cyan("-i [erFile] [dsn]") + "	" + u.White("从描述文件导入数据结构"))
 	fmt.Println("	dsn	" + u.White("mysql://、postgres://、oci8://、mssql://、sqlite3:// 等开头数据库描述，如未指定尝试从*.yml中查找"))
 	fmt.Println("")
 	fmt.Println("Samples:")
@@ -652,5 +925,9 @@ func printUsage() {
 	fmt.Println("	" + u.Cyan("dao -u"))
 	fmt.Println("	" + u.Cyan("dao -u dbname"))
 	fmt.Println("	" + u.Cyan("dao -u mysql://user:password@host:port/db"))
+	fmt.Println("	" + u.Cyan("dao -i"))
+	fmt.Println("	" + u.Cyan("dao -i er.txt"))
+	fmt.Println("	" + u.Cyan("dao -i er.txt dbname"))
+	fmt.Println("	" + u.Cyan("dao -i er.txt mysql://user:password@host:port/db"))
 	fmt.Println("")
 }
