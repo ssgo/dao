@@ -16,6 +16,18 @@
             align-items: flex-start;
         }
 
+        .keyHint {
+            position: absolute;
+            right: 0;
+            bottom: 0;
+            padding: 4px;
+            color: #999;
+        }
+
+        .keyHint b {
+            color: #aaa;
+        }
+
         .group {
             background: #222;
             border-radius: 10px;
@@ -61,21 +73,33 @@
         }
     </style>
     <script>
-        let textIndex = 1
+        let modeIndex = parseInt(localStorage.erMode || '1')
+        let modeNames = ['简约', '物理视图', '逻辑视图']
+        function switchMode(index){
+            modeIndex = index
+            localStorage.erMode = modeIndex
+            for (let node of document.querySelectorAll('[text' + modeIndex + ']')) {
+                node.innerHTML = node.getAttribute('text' + modeIndex)
+            }
+            document.querySelector('.keyHint').innerHTML = '当前模式：<b>'+modeNames[modeIndex-1]+'</b>（按下Tab键切换）'
+        }
+        window.addEventListener('load', function (){
+            switchMode(modeIndex)
+        })
         window.addEventListener('keydown', function switchText(event) {
             if (event.code === 'Tab') {
                 event.preventDefault()
-                textIndex++
-                if (textIndex > 3) textIndex = 1
-                for (let node of document.querySelectorAll('[text' + textIndex + ']')) {
-                    node.innerHTML = node.getAttribute('text' + textIndex)
-                }
+                modeIndex++
+                if (modeIndex > 3) modeIndex = 1
+                switchMode(modeIndex)
                 return false
             }
         })
     </script>
 </head>
 <body>
+<div class="keyHint"></div>
+
 {{range .groups}}
 <div class="group">
     <div class="title">{{.Name}}</div>
