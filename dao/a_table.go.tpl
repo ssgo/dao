@@ -527,7 +527,11 @@ func (query *{{.FixedTableName}}Query) parse(tag string) (string, []interface{})
     if query.extraArgs != nil {
         query.args = append(query.args, query.extraArgs...)
     }
-	return fmt.Sprint("SELECT ", fields, " FROM `{{.TableName}}`", leftJoinsStr, " WHERE ", query.where, validWhere, query.extraSql), query.args
+    whereStr := ""
+    if query.where != "" || validWhere != "" {
+        whereStr = " WHERE " + query.where + validWhere
+    }
+	return fmt.Sprint("SELECT ", fields, " FROM `{{.TableName}}`", leftJoinsStr, whereStr, query.extraSql), query.args
 }
 
 func (query *{{.FixedTableName}}Query) Sql(sql string, args ...interface{}) *{{.FixedTableName}}Query {

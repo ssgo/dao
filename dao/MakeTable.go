@@ -1,4 +1,4 @@
-package main
+package dao
 
 import (
 	"fmt"
@@ -100,14 +100,15 @@ func (field *TableField) Parse(tableType string) {
 	field.Desc = strings.Join(a, "")
 }
 
-var ddlTableMatcher = regexp.MustCompile("(?is)^\\s*CREATE\\s+TABLE\\s+`?([\\w]+)`?\\s*\\(\\s*(.*?)\\s*\\);?\\s*$")
-var ddlFieldMatcher = regexp.MustCompile("(?s)\\s*[`\\[]?([\\w]+)[`\\]]?\\s+\\[?([\\w() ]+)\\]?\\s*(.*?)(,|$)")
-var ddlKeyMatcher = regexp.MustCompile("[`\\[]?([\\w]+)[`\\]]?\\s*(,|\\))")
+var ddlTableMatcher = regexp.MustCompile("(?is)^\\s*CREATE\\s+TABLE\\s+`?(\\w+)`?\\s*\\(\\s*(.*?)\\s*\\);?\\s*$")
+var ddlFieldMatcher = regexp.MustCompile("(?s)\\s*[`\\[]?(\\w+)[`\\]]?\\s+\\[?([\\w() ]+)]?\\s*(.*?)(,|$)")
+var ddlKeyMatcher = regexp.MustCompile("[`\\[]?(\\w+)[`\\]]?\\s*([,)])")
 var ddlNotNullMatcher = regexp.MustCompile("(?i)\\s+NOT NULL")
 var ddlNullMatcher = regexp.MustCompile("(?i)\\s+NULL")
-var ddlDefaultMatcher = regexp.MustCompile("(?i)\\s+DEFAULT\\s+(.*?)$")
-var ddlIndexMatcher = regexp.MustCompile("(?is)^\\s*CREATE\\s+([A-Za-z ]+)\\s+`?([\\w]+)`?\\s+ON\\s+`?([\\w]+)`?\\s*\\(\\s*(.*?)\\s*\\);?\\s*$")
-var ddlIndexFieldMatcher = regexp.MustCompile("[`\\[]?([\\w]+)[`\\]]?\\s*(,|$)")
+
+// var ddlDefaultMatcher = regexp.MustCompile("(?i)\\s+DEFAULT\\s+(.*?)$")
+var ddlIndexMatcher = regexp.MustCompile("(?is)^\\s*CREATE\\s+([A-Za-z ]+)\\s+`?(\\w+)`?\\s+ON\\s+`?(\\w+)`?\\s*\\(\\s*(.*?)\\s*\\);?\\s*$")
+var ddlIndexFieldMatcher = regexp.MustCompile("[`\\[]?(\\w+)[`\\]]?\\s*(,|$)")
 
 func CheckTable(conn *db.DB, table *TableStruct, logger *log.Logger) error {
 	//fmt.Println(u.JsonP(ddlKeyMatcher.FindAllStringSubmatch("(`key`,id, `name` )", 100)), "====================")
@@ -213,6 +214,7 @@ func CheckTable(conn *db.DB, table *TableStruct, logger *log.Logger) error {
 	}
 	oldTableComment := u.String(tableInfo["comment"])
 
+	sqlLog := make([]string, 0)
 	if tableInfo["name"] != nil && tableInfo["name"] != "" {
 		// 合并字段
 		oldFieldList := make([]*TableFieldDesc, 0)
@@ -287,7 +289,7 @@ func CheckTable(conn *db.DB, table *TableStruct, logger *log.Logger) error {
 			//fmt.Println(u.JsonP(oldFieldList), 1)
 			//fmt.Println(u.JsonP(oldIndexInfos), 2)
 		} else if conn.Config.Type == "mysql" {
-			conn.Query("SELECT column_name, column_comment FROM information_schema.columns WHERE TABLE_SCHEMA='" + conn.Config.DB + "' AND TABLE_NAME='" + table.Name + "'").ToKV(&oldComments)
+			_ = conn.Query("SELECT column_name, column_comment FROM information_schema.columns WHERE TABLE_SCHEMA='" + conn.Config.DB + "' AND TABLE_NAME='" + table.Name + "'").ToKV(&oldComments)
 			_ = conn.Query("DESC `" + table.Name + "`").To(&oldFieldList)
 			_ = conn.Query("SHOW INDEX FROM `" + table.Name + "`").To(&oldIndexInfos)
 		}
@@ -471,7 +473,11 @@ func CheckTable(conn *db.DB, table *TableStruct, logger *log.Logger) error {
 		defer tx.CheckFinished()
 		if conn.Config.Type == "sqlite3" {
 			for _, action := range actions {
-				fmt.Println(u.Dim("\t" + strings.ReplaceAll(action, "\n", "\n\t")))
+				if logger != nil {
+					sqlLog = append(sqlLog, "\t"+strings.ReplaceAll(action, "\n", "\n\t"))
+				} else {
+					fmt.Println(u.Dim("\t" + strings.ReplaceAll(action, "\n", "\n\t")))
+				}
 				result = tx.Exec(action)
 				if result.Error != nil {
 					break
@@ -479,10 +485,14 @@ func CheckTable(conn *db.DB, table *TableStruct, logger *log.Logger) error {
 			}
 		} else if conn.Config.Type == "mysql" {
 			sql := "ALTER TABLE `" + table.Name + "` " + strings.Join(actions, "\n,") + ";"
-			fmt.Println(u.Dim("\t" + strings.ReplaceAll(sql, "\n", "\n\t")))
+			if logger != nil {
+				sqlLog = append(sqlLog, "\t"+strings.ReplaceAll(sql, "\n", "\n\t"))
+			} else {
+				fmt.Println(u.Dim("\t" + strings.ReplaceAll(sql, "\n", "\n\t")))
+			}
 			result = tx.Exec(sql)
 		}
-		if result.Error != nil {
+		if result != nil && result.Error != nil {
 			_ = tx.Rollback()
 		} else {
 			_ = tx.Commit()
@@ -513,14 +523,22 @@ func CheckTable(conn *db.DB, table *TableStruct, logger *log.Logger) error {
 		}
 		tx := conn.Begin()
 		defer tx.CheckFinished()
-		fmt.Println(u.Dim("\t" + strings.ReplaceAll(sql, "\n", "\n\t")))
+		if logger != nil {
+			sqlLog = append(sqlLog, "\t"+strings.ReplaceAll(sql, "\n", "\n\t"))
+		} else {
+			fmt.Println(u.Dim("\t" + strings.ReplaceAll(sql, "\n", "\n\t")))
+		}
 		result = tx.Exec(sql)
 
 		if result.Error == nil {
 			if conn.Config.Type == "sqlite3" {
 				for _, indexSet := range indexSets {
 					//fmt.Println(indexSet)
-					fmt.Println(u.Dim("\t" + strings.ReplaceAll(indexSet, "\n", "\n\t")))
+					if logger != nil {
+						sqlLog = append(sqlLog, "\t"+strings.ReplaceAll(indexSet, "\n", "\n\t"))
+					} else {
+						fmt.Println(u.Dim("\t" + strings.ReplaceAll(indexSet, "\n", "\n\t")))
+					}
 					r := tx.Exec(indexSet)
 					if r.Error != nil {
 						result = r
@@ -536,12 +554,20 @@ func CheckTable(conn *db.DB, table *TableStruct, logger *log.Logger) error {
 
 	}
 
+	if logger != nil {
+		logger.Info("run sql", "sql", strings.Join(sqlLog, "\n"))
+	}
+
 	if result == nil {
 		return nil
 	}
 
 	if result.Error != nil {
-		logger.Error(result.Error.Error())
+		if logger != nil {
+			logger.Error(result.Error.Error())
+		} else {
+			fmt.Println(result.Error.Error())
+		}
 	}
 
 	return result.Error
