@@ -79,11 +79,12 @@ func (dao *{{.FixedTableName}}Dao) GetConnection() *db.DB {
 }
 
 func (dao *{{.FixedTableName}}Dao) New() *{{.FixedTableName}}Item {
-	return &{{.FixedTableName}}Item{dao: dao}
+	return &{{.FixedTableName}}Item{dao: dao, isNew: true, changes: map[string]any{}}
 }
 
 func (dao *{{.FixedTableName}}Dao) Attach(item *{{.FixedTableName}}Item) {
 	item.dao = dao
+	item.changes = map[string]any{}
 }
 
 {{range .UniqueKeys}}
@@ -96,6 +97,7 @@ func (dao *{{$.FixedTableName}}Dao) GetBy{{.Name}}({{.Params}}) *{{$.FixedTableN
 	}
 	if len(result) > 0 {
 		result[0].dao = dao
+		result[0].changes = map[string]any{}
 		return &result[0]
 	}
 	return nil
@@ -112,6 +114,7 @@ func (dao *{{.FixedTableName}}Dao) Get({{.PrimaryKey.Params}}) *{{.FixedTableNam
 	}
 	if len(result) > 0 {
 		result[0].dao = dao
+		result[0].changes = map[string]any{}
 		return &result[0]
 	}
 	return nil
@@ -126,6 +129,7 @@ func (dao *{{.FixedTableName}}Dao) GetWithFields({{.PrimaryKey.Params}}, fields 
 	}
 	if len(result) > 0 {
 		result[0].dao = dao
+		result[0].changes = map[string]any{}
 		return &result[0]
 	}
 	return nil
@@ -141,6 +145,7 @@ func (dao *{{.FixedTableName}}Dao) GetWithInvalid({{.PrimaryKey.Params}}) *{{.Fi
 	}
 	if len(result) > 0 {
 		result[0].dao = dao
+		result[0].changes = map[string]any{}
 		return &result[0]
 	}
 	return nil
@@ -888,6 +893,7 @@ func (query *{{.FixedTableName}}Query) List() []{{.FixedTableName}}Item {
 	_ = query.result.To(&list)
 	for i := range list {
 		list[i].dao = query.dao
+		list[i].changes = map[string]any{}
 	}
 	return list
 }
@@ -935,6 +941,7 @@ func (query *{{.FixedTableName}}Query) ListBy(fields ...string) map[string]*{{.F
 	}
 	for k := range out {
 		out[k].dao = query.dao
+		out[k].changes = map[string]any{}
 	}
 	return out
 }
@@ -971,6 +978,8 @@ const (
 
 type {{.FixedTableName}}Item struct {
 	dao *{{.FixedTableName}}Dao
+	isNew bool
+	changes map[string]any
 {{range .Fields}}
 	{{.Name}} {{.Type}}{{ end }}
 }
@@ -983,8 +992,16 @@ func (item *{{$.FixedTableName}}Item) {{.Name}}Value() {{.Type}} {
 	return *item.{{.Name}}
 }
 
-func (item *{{$.FixedTableName}}Item) Set{{.Name}}(value {{.Type}}) {
+func (item *{{$.FixedTableName}}Item) Set{{.Name}}Value(value {{.Type}}) {
 	item.{{.Name}} = &value
+	item.changes["{{.Name}}"] = &value
+}
+{{ end }}
+
+{{range .Fields}}
+func (item *{{$.FixedTableName}}Item) Set{{.Name}}(value {{.Type}}) {
+	item.{{.Name}} = value
+	item.changes["{{.Name}}"] = value
 }
 {{ end }}
 
@@ -1007,12 +1024,17 @@ func (item *{{.FixedTableName}}Item) Save() (ok bool) {
 	    item.{{.AutoIdField}} = &newIdX
 	    ok = insertOk
 	    return
-	}else{
-	    return item.dao.Replace(item)
 	}
-    {{ else }}
-	return item.dao.Replace(item)
     {{ end }}
+    if item.isNew {
+        return item.dao.Insert(item)
+    }
+    if len(item.changes) == 0 {
+	    return item.dao.Replace(item)
+    }
+    data := item.changes
+    item.changes = map[string]any{}
+    return item.dao.Update(data, {{.PrimaryKey.ItemArgs}})
 }
 
 {{ if .InvalidSet }}
