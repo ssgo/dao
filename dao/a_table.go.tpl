@@ -914,26 +914,32 @@ func (query *{{.FixedTableName}}Query) ListBy(fields ...string) map[string]*{{.F
 	out := make(map[string]*{{.FixedTableName}}Item)
 	list := make([]{{.FixedTableName}}Item, 0)
 	_ = query.result.To(&list)
-	fieldIndexs := make([]int, len(fields))
+	fieldIndexes := make([]int, len(fields))
 	for i, item := range list {
 		itemValue := reflect.ValueOf(item)
 		itemType := itemValue.Type()
 		for i := 0; i < itemType.NumField(); i++ {
-			for j := range fieldIndexs {
+			for j := range fieldIndexes {
 				if strings.ToLower(fields[j]) == strings.ToLower(itemType.Field(i).Name) {
-					fieldIndexs[j] = i
+					fieldIndexes[j] = i
 					break
 				}
 			}
 		}
 
 		key := ""
-		if len(fieldIndexs) == 1 {
-			key = u.String(itemValue.Field(fieldIndexs[0]).Interface())
+		if len(fieldIndexes) == 1 {
+			v := itemValue.Field(fieldIndexes[0])
+			if !v.IsNil() && v.CanInterface() {
+				key = u.String(v.Interface())
+			}
 		} else {
 			keys := make([]string, 0)
-			for _, i := range fieldIndexs {
-				keys = append(keys, u.String(itemValue.Field(fieldIndexs[i]).Interface()))
+			for _, i := range fieldIndexes {
+				v := itemValue.Field(fieldIndexes[i])
+				if !v.IsNil() && v.CanInterface() {
+					keys = append(keys, u.String(v.Interface()))
+				}
 			}
 			key = strings.Join(keys, "_")
 		}
