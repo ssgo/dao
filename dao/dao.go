@@ -907,12 +907,12 @@ func MakeDBFromDesc(conn *db.DB, desc string, logger *log.Logger) error {
 					} else {
 						fmt.Println("  -", table.Name, table.Comment, u.BRed(err.Error()))
 					}
-				} else {
-					if logger != nil {
-						logger.Info("make table success", "tableName", table)
-					} else {
-						fmt.Println("  -", table.Name, table.Comment, u.BGreen("OK"))
-					}
+					//} else {
+					//	if logger != nil {
+					//		logger.Info("make table success", "tableName", table)
+					//	} else {
+					//		fmt.Println("  -", table.Name, table.Comment, u.BGreen("OK"))
+					//	}
 				}
 			}
 		}
