@@ -4,8 +4,6 @@ import (
 	_ "embed"
 	"errors"
 	"fmt"
-	_ "github.com/go-sql-driver/mysql"
-	_ "github.com/mattn/go-sqlite3"
 	"github.com/ssgo/db"
 	"github.com/ssgo/log"
 	"github.com/ssgo/u"
