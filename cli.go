@@ -175,6 +175,8 @@ func getDBs(args []string) []string {
 							tag = "mssql://"
 						} else if strings.Contains(line, "sqlite3://") {
 							tag = "sqlite3://"
+						} else if strings.Contains(line, "sqlite://") {
+							tag = "sqlite://"
 						} else {
 							continue
 						}
@@ -349,7 +351,7 @@ func printUsage() {
 	fmt.Println("	" + u.Cyan("-i [erFile] [dsn]") + "	" + u.White("从描述文件导入数据结构"))
 	fmt.Println("	" + u.Cyan("-c [erFile] [dbname]") + "	" + u.White("从描述文件创建或更新DAO对象"))
 	fmt.Println("	" + u.Cyan("-er [erFile] [dbname] [output file]") + "	" + u.White("从描述文件创建ER图"))
-	fmt.Println("	dsn	" + u.White("mysql://、postgres://、oci8://、mssql://、sqlite3:// 等开头数据库描述，如未指定尝试从*.yml中查找"))
+	fmt.Println("	dsn	" + u.White("mysql://、postgres://、oci8://、mssql://、sqlite3://、sqlite:// 等开头数据库描述，如未指定尝试从*.yml中查找"))
 	fmt.Println("")
 	fmt.Println("Samples:")
 	fmt.Println("	" + u.Cyan("dao -t"))

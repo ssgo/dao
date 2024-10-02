@@ -47,7 +47,7 @@ func (field *TableField) Parse(tableType string) {
 	//	field.Type += " unsigned"
 	//}
 
-	if tableType == "sqlite3" {
+	if strings.HasPrefix(tableType, "sqlite") {
 		// sqlite3 不能修改字段，统一使用NULL
 		field.Null = "NULL"
 		if field.Extra == "AUTO_INCREMENT" {
@@ -89,7 +89,7 @@ func (field *TableField) Parse(tableType string) {
 			a = append(a, " DEFAULT '"+field.Default+"'")
 		}
 	}
-	if tableType == "sqlite3" {
+	if strings.HasPrefix(tableType, "sqlite") {
 		field.Comment = ""
 		field.Type = "numeric"
 	} else if tableType == "mysql" {
@@ -122,7 +122,7 @@ func CheckTable(conn *db.DB, table *TableStruct, logger *log.Logger) error {
 		field.Parse(conn.Config.Type)
 		table.Fields[i] = field
 
-		if conn.Config.Type == "sqlite3" {
+		if strings.HasPrefix(conn.Config.Type, "sqlite") {
 			if field.Index == "pk" && field.Extra != "PRIMARY KEY AUTOINCREMENT" {
 				// sqlite3 用 unique 代替 pk
 				field.Index = "unique"
@@ -133,7 +133,7 @@ func CheckTable(conn *db.DB, table *TableStruct, logger *log.Logger) error {
 
 		switch field.Index {
 		case "pk":
-			if conn.Config.Type == "sqlite3" {
+			if strings.HasPrefix(conn.Config.Type, "sqlite") {
 				if field.Extra != "PRIMARY KEY AUTOINCREMENT" {
 					pks = append(pks, field.Name)
 				}
@@ -148,7 +148,7 @@ func CheckTable(conn *db.DB, table *TableStruct, logger *log.Logger) error {
 			if keySetBy[keyName] != "" {
 				keySetFields[keyName] += " " + field.Name
 				// 复合索引
-				if conn.Config.Type == "sqlite3" {
+				if strings.HasPrefix(conn.Config.Type, "sqlite") {
 					keySetBy[keyName] = strings.Replace(keySetBy[keyName], ")", ", `"+field.Name+"`)", 1)
 				} else if conn.Config.Type == "mysql" {
 					keySetBy[keyName] = strings.Replace(keySetBy[keyName], ") COMMENT", ", `"+field.Name+"`) COMMENT", 1)
@@ -156,7 +156,7 @@ func CheckTable(conn *db.DB, table *TableStruct, logger *log.Logger) error {
 			} else {
 				keySetFields[keyName] = field.Name
 				keySet := ""
-				if conn.Config.Type == "sqlite3" {
+				if strings.HasPrefix(conn.Config.Type, "sqlite") {
 					keySet = fmt.Sprintf("CREATE UNIQUE INDEX `%s` ON `%s` (`%s`)", keyName, table.Name, field.Name)
 				} else if conn.Config.Type == "mysql" {
 					keySet = fmt.Sprintf("UNIQUE KEY `%s` (`%s`) COMMENT '%s'", keyName, field.Name, field.Comment)
@@ -179,7 +179,7 @@ func CheckTable(conn *db.DB, table *TableStruct, logger *log.Logger) error {
 			if keySetBy[keyName] != "" {
 				keySetFields[keyName] += " " + field.Name
 				// 复合索引
-				if conn.Config.Type == "sqlite3" {
+				if strings.HasPrefix(conn.Config.Type, "sqlite") {
 					keySetBy[keyName] = strings.Replace(keySetBy[keyName], ")", ", `"+field.Name+"`)", 1)
 				} else if conn.Config.Type == "mysql" {
 					keySetBy[keyName] = strings.Replace(keySetBy[keyName], ") COMMENT", ", `"+field.Name+"`) COMMENT", 1)
@@ -187,7 +187,7 @@ func CheckTable(conn *db.DB, table *TableStruct, logger *log.Logger) error {
 			} else {
 				keySetFields[keyName] = field.Name
 				keySet := ""
-				if conn.Config.Type == "sqlite3" {
+				if strings.HasPrefix(conn.Config.Type, "sqlite") {
 					keySet = fmt.Sprintf("CREATE INDEX `%s` ON `%s` (`%s`)", keyName, table.Name, field.Name)
 				} else if conn.Config.Type == "mysql" {
 					keySet = fmt.Sprintf("KEY `%s` (`%s`) COMMENT '%s'", keyName, field.Name, field.Comment)
@@ -206,7 +206,7 @@ func CheckTable(conn *db.DB, table *TableStruct, logger *log.Logger) error {
 
 	var result *db.ExecResult
 	var tableInfo map[string]interface{}
-	if conn.Config.Type == "sqlite3" {
+	if strings.HasPrefix(conn.Config.Type, "sqlite") {
 		tableInfo = conn.Query("SELECT `name`, `sql` FROM `sqlite_master` WHERE `type`='table' AND `name`='" + table.Name + "'").MapOnR1()
 		tableInfo["comment"] = ""
 	} else if conn.Config.Type == "mysql" {
@@ -223,7 +223,7 @@ func CheckTable(conn *db.DB, table *TableStruct, logger *log.Logger) error {
 		oldIndexInfos := make([]*TableKeyDesc, 0)
 
 		oldComments := map[string]string{}
-		if conn.Config.Type == "sqlite3" {
+		if strings.HasPrefix(conn.Config.Type, "sqlite") {
 			tableM := ddlTableMatcher.FindStringSubmatch(u.String(tableInfo["sql"]))
 			if tableM != nil {
 				fieldsM := ddlFieldMatcher.FindAllStringSubmatch(tableM[2], 2000)
@@ -309,7 +309,7 @@ func CheckTable(conn *db.DB, table *TableStruct, logger *log.Logger) error {
 		// 先后顺序
 		prevFieldId := ""
 		for _, field := range oldFieldList {
-			if conn.Config.Type == "sqlite3" {
+			if strings.HasPrefix(conn.Config.Type, "sqlite") {
 				field.Type = "numeric"
 			} else if conn.Config.Type == "mysql" {
 				field.After = prevFieldId
@@ -322,7 +322,7 @@ func CheckTable(conn *db.DB, table *TableStruct, logger *log.Logger) error {
 		actions := make([]string, 0)
 		for keyId := range oldIndexes {
 			if keyId != "PRIMARY" && strings.ToLower(keySetFields[keyId]) != strings.ToLower(oldIndexes[keyId]) {
-				if conn.Config.Type == "sqlite3" {
+				if strings.HasPrefix(conn.Config.Type, "sqlite") {
 					actions = append(actions, "DROP INDEX `"+keyId+"`")
 				} else if conn.Config.Type == "mysql" {
 					actions = append(actions, "DROP KEY `"+keyId+"`")
@@ -331,7 +331,7 @@ func CheckTable(conn *db.DB, table *TableStruct, logger *log.Logger) error {
 		}
 		//fmt.Println("  =>>>>>>>>", oldIndexes, pks)
 		if oldIndexes["PRIMARY"] != "" && strings.ToLower(oldIndexes["PRIMARY"]) != strings.ToLower(strings.Join(pks, " ")) {
-			if conn.Config.Type == "sqlite3" {
+			if strings.HasPrefix(conn.Config.Type, "sqlite") {
 			} else if conn.Config.Type == "mysql" {
 				actions = append(actions, "DROP PRIMARY KEY")
 			}
@@ -345,7 +345,7 @@ func CheckTable(conn *db.DB, table *TableStruct, logger *log.Logger) error {
 
 			// 修复部分数据库的特殊性
 			if oldField == nil {
-				if conn.Config.Type == "sqlite3" {
+				if strings.HasPrefix(conn.Config.Type, "sqlite") {
 					actions = append(actions, "ALTER TABLE `"+table.Name+"` ADD COLUMN "+field.Desc)
 				} else if conn.Config.Type == "mysql" {
 					actions = append(actions, "ADD COLUMN "+field.Desc)
@@ -384,7 +384,7 @@ func CheckTable(conn *db.DB, table *TableStruct, logger *log.Logger) error {
 					//UPDATE `config` SET `key`=`keyOld`;
 					//ALTER TABLE `config` DROP COLUMN `keyOld`;
 					//CREATE INDEX `uk_config_key` ON `config` (`key`);
-					if conn.Config.Type == "sqlite3" {
+					if strings.HasPrefix(conn.Config.Type, "sqlite") {
 						// 不支持修改字段，所以要先创建然后复制数据再删除
 
 						// 方案一（已放弃）重新创建表实现修改
@@ -430,7 +430,7 @@ func CheckTable(conn *db.DB, table *TableStruct, logger *log.Logger) error {
 
 		for oldFieldName := range oldFields {
 			if newFieldExists[oldFieldName] != true {
-				if conn.Config.Type == "sqlite3" {
+				if strings.HasPrefix(conn.Config.Type, "sqlite") {
 					//actions = append(actions, "ALTER TABLE `"+table.Name+"` DROP COLUMN `"+oldFieldName+"`")
 				} else if conn.Config.Type == "mysql" {
 					actions = append(actions, "DROP COLUMN `"+oldFieldName+"`")
@@ -449,7 +449,7 @@ func CheckTable(conn *db.DB, table *TableStruct, logger *log.Logger) error {
 		//fmt.Println(222, u.JsonP(keySetBy), 222 )
 		for keyId, keySet := range keySetBy {
 			if oldIndexes[keyId] == "" || strings.ToLower(oldIndexes[keyId]) != strings.ToLower(keySetFields[keyId]) {
-				if conn.Config.Type == "sqlite3" {
+				if strings.HasPrefix(conn.Config.Type, "sqlite") {
 					actions = append(actions, keySet)
 				} else if conn.Config.Type == "mysql" {
 					actions = append(actions, "ADD "+keySet)
@@ -471,7 +471,7 @@ func CheckTable(conn *db.DB, table *TableStruct, logger *log.Logger) error {
 
 		tx := conn.Begin()
 		defer tx.CheckFinished()
-		if conn.Config.Type == "sqlite3" {
+		if strings.HasPrefix(conn.Config.Type, "sqlite") {
 			for _, action := range actions {
 				if logger != nil {
 					sqlLog = append(sqlLog, "\t"+strings.ReplaceAll(action, "\n", "\n\t"))
@@ -504,7 +504,7 @@ func CheckTable(conn *db.DB, table *TableStruct, logger *log.Logger) error {
 		}
 
 		indexSets := make([]string, 0) // sqlite3 额外创建索引的sql
-		if conn.Config.Type == "sqlite3" {
+		if strings.HasPrefix(conn.Config.Type, "sqlite") {
 			for _, indexSql := range keySetBy {
 				indexSets = append(indexSets, indexSql)
 			}
@@ -516,7 +516,7 @@ func CheckTable(conn *db.DB, table *TableStruct, logger *log.Logger) error {
 
 		sql := ""
 
-		if conn.Config.Type == "sqlite3" {
+		if strings.HasPrefix(conn.Config.Type, "sqlite") {
 			sql = fmt.Sprintf("CREATE TABLE `%s` (\n%s\n);", table.Name, strings.Join(fieldSets, ",\n"))
 		} else if conn.Config.Type == "mysql" {
 			sql = fmt.Sprintf("CREATE TABLE `%s` (\n%s\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='%s';", table.Name, strings.Join(fieldSets, ",\n"), table.Comment)
@@ -531,7 +531,7 @@ func CheckTable(conn *db.DB, table *TableStruct, logger *log.Logger) error {
 		result = tx.Exec(sql)
 
 		if result.Error == nil {
-			if conn.Config.Type == "sqlite3" {
+			if strings.HasPrefix(conn.Config.Type, "sqlite") {
 				for _, indexSet := range indexSets {
 					//fmt.Println(indexSet)
 					if logger != nil {
@@ -555,7 +555,7 @@ func CheckTable(conn *db.DB, table *TableStruct, logger *log.Logger) error {
 	}
 
 	if logger != nil {
-		logger.Info("run sql", "sql", strings.Join(sqlLog, "\n"))
+		logger.Info("run sql", "sql", strings.Join(sqlLog, "\n"), "size", len(sqlLog), "sss", u.JsonP(sqlLog))
 	}
 
 	if result == nil {
