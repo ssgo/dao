@@ -4,14 +4,15 @@ import (
 	_ "embed"
 	"errors"
 	"fmt"
-	"github.com/ssgo/db"
-	"github.com/ssgo/log"
-	"github.com/ssgo/u"
 	"os"
 	"path"
 	"regexp"
 	"strings"
 	"text/template"
+
+	"github.com/ssgo/db"
+	"github.com/ssgo/log"
+	"github.com/ssgo/u"
 )
 
 type ValidFieldConfig struct {
@@ -987,7 +988,7 @@ func MakeERFromDesc(desc string) []*ERGroup {
 				IndexGroup: "",
 				Default:    "",
 				Comment:    comment,
-				Null:       "NOT NULL",
+				Null:       "NULL",
 				Extra:      "",
 				Desc:       "",
 			}

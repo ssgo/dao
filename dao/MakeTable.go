@@ -2,11 +2,12 @@ package dao
 
 import (
 	"fmt"
+	"regexp"
+	"strings"
+
 	"github.com/ssgo/db"
 	"github.com/ssgo/log"
 	"github.com/ssgo/u"
-	"regexp"
-	"strings"
 )
 
 type TableFieldDesc struct {
@@ -342,7 +343,6 @@ func CheckTable(conn *db.DB, table *TableStruct, logger *log.Logger) error {
 		for _, field := range table.Fields {
 			newFieldExists[field.Name] = true
 			oldField := oldFields[field.Name]
-
 			// 修复部分数据库的特殊性
 			if oldField == nil {
 				if strings.HasPrefix(conn.Config.Type, "sqlite") {
