@@ -3,17 +3,18 @@ package main
 import (
 	_ "embed"
 	"fmt"
+	"os"
+	"path"
+	"path/filepath"
+	"regexp"
+	"strings"
+
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/ssgo/dao/dao"
 	"github.com/ssgo/db"
 	"github.com/ssgo/log"
 	"github.com/ssgo/u"
 	_ "modernc.org/sqlite"
-	"os"
-	"path"
-	"path/filepath"
-	"regexp"
-	"strings"
 )
 
 //
@@ -171,8 +172,8 @@ func getDBs(args []string) []string {
 							tag = "postgres://"
 						} else if strings.Contains(line, "oci8://") {
 							tag = "oci8://"
-						} else if strings.Contains(line, "mssql://") {
-							tag = "mssql://"
+						} else if strings.Contains(line, "sqlserver://") {
+							tag = "sqlserver://"
 						} else if strings.Contains(line, "sqlite3://") {
 							tag = "sqlite3://"
 						} else if strings.Contains(line, "sqlite://") {
@@ -351,7 +352,7 @@ func printUsage() {
 	fmt.Println("	" + u.Cyan("-i [erFile] [dsn]") + "	" + u.White("从描述文件导入数据结构"))
 	fmt.Println("	" + u.Cyan("-c [erFile] [dbname]") + "	" + u.White("从描述文件创建或更新DAO对象"))
 	fmt.Println("	" + u.Cyan("-er [erFile] [dbname] [output file]") + "	" + u.White("从描述文件创建ER图"))
-	fmt.Println("	dsn	" + u.White("mysql://、postgres://、oci8://、mssql://、sqlite3://、sqlite:// 等开头数据库描述，如未指定尝试从*.yml中查找"))
+	fmt.Println("	dsn	" + u.White("mysql://、postgres://、oci8://、sqlserver://、sqlite3://、sqlite:// 等开头数据库描述，如未指定尝试从*.yml中查找"))
 	fmt.Println("")
 	fmt.Println("Samples:")
 	fmt.Println("	" + u.Cyan("dao -t"))

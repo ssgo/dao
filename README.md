@@ -12,7 +12,7 @@ Usage:
     dao -i [erFile] [dsn]                   从描述文件导入数据结构
     dao -c [erFile] [dbname]                从描述文件创建或更新DAO对象
     dao -er [erFile] [dbname] [output file] 从描述文件创建ER图
-    [dsn] 以 mysql://、postgres://、oci8://、mssql://、sqlite3:// 等开头数据库描述，如未指定尝试从*.yml中查找
+    [dsn] 以 mysql://、postgres://、oci8://、sqlserver://、sqlite3:// 等开头数据库描述，如未指定尝试从*.yml中查找
 
 Samples:
     dao -t

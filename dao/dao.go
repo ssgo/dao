@@ -203,7 +203,7 @@ var typeMapping = map[string]map[string]string{
 		"t":   "TEXT",
 		"bb":  "BYTEA",
 	},
-	"mssql": {
+	"sqlserver": {
 		"PK":  "PRIMARY KEY",
 		"AI":  "IDENTITY(1,1)",
 		"I":   "INDEX",
@@ -1168,6 +1168,9 @@ func MakeERFromDesc(dbType string, desc string) []*ERGroup {
 				if wn != nil {
 					tag = wn[1]
 					size = u.Int(wn[2])
+				}
+				if tag == "PK" && strings.HasPrefix(dbType, "sqlite") {
+					tag = "U99"
 				}
 				switch tag {
 				case "PK":

@@ -137,7 +137,7 @@ func CheckTable(conn *db.DB, table *TableStruct, logger *log.Logger) error {
 		// }
 
 		switch field.Index {
-		case "PRIMARY KEY":
+		case "PRIMARY KEY", "primary key":
 			if strings.HasPrefix(conn.Config.Type, "sqlite") {
 				if field.Extra != "PRIMARY KEY AUTOINCREMENT" {
 					pks = append(pks, field.Name)
@@ -145,7 +145,7 @@ func CheckTable(conn *db.DB, table *TableStruct, logger *log.Logger) error {
 			} else {
 				pks = append(pks, field.Name)
 			}
-		case "unique":
+		case "UNIQUE", "unique":
 			keyName := fmt.Sprint("uk_", table.Name, "_", field.Name)
 			if field.IndexGroup != "" {
 				keyName = fmt.Sprint("uk_", table.Name, "_", field.IndexGroup)
@@ -171,7 +171,7 @@ func CheckTable(conn *db.DB, table *TableStruct, logger *log.Logger) error {
 				keySets = append(keySets, keySet)
 				keySetBy[keyName] = keySet
 			}
-		case "fulltext":
+		case "FULLTEXT", "fulltext":
 			if strings.HasPrefix(conn.Config.Type, "sqlite") || conn.Config.Type == "chai" {
 				// } else if conn.Config.Type == "mysql" {
 			} else {
@@ -180,7 +180,7 @@ func CheckTable(conn *db.DB, table *TableStruct, logger *log.Logger) error {
 				keySets = append(keySets, keySet)
 				keySetBy[keyName] = keySet
 			}
-		case "index":
+		case "INDEX", "index":
 			keyName := fmt.Sprint("ik_", table.Name, "_", field.Name)
 			if field.IndexGroup != "" {
 				keyName = fmt.Sprint("ik_", table.Name, "_", field.IndexGroup)
@@ -620,6 +620,9 @@ func CheckTable(conn *db.DB, table *TableStruct, logger *log.Logger) error {
 					}
 					r := tx.Exec(indexSet)
 					if r.Error != nil {
+						if logger != nil {
+							logger.Error(r.Error.Error())
+						}
 						result = r
 					}
 				}
