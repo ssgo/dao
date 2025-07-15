@@ -110,8 +110,8 @@ var typeMapping = map[string]map[string]string{
 		"I":   "INDEX",
 		"U":   "UNIQUE",
 		"TI":  "FULLTEXT",
-		"ct":  "CURRENT_TIMESTAMP",
-		"ctu": "CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP",
+		"ct":  "CURRENT_TIMESTAMP(6)",
+		"ctu": "CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6)",
 		"n":   "NULL",
 		"nn":  "NOT NULL",
 		"c":   "CHAR",
@@ -1181,14 +1181,17 @@ func MakeERFromDesc(dbType string, desc string) []*ERGroup {
 				case "AI":
 					field.Extra = typeMapping[dbType][tag]
 					field.Index = typeMapping[dbType]["PK"]
+					field.Null = typeMapping[dbType]["nn"]
 				case "TI":
 					field.Index = typeMapping[dbType][tag]
 				case "U":
 					field.Index = typeMapping[dbType][tag]
 				case "ct":
 					field.Default = typeMapping[dbType][tag]
+					field.Null = typeMapping[dbType]["nn"]
 				case "ctu":
 					field.Default = typeMapping[dbType][tag]
+					field.Null = typeMapping[dbType]["nn"]
 				case "n":
 					field.Null = typeMapping[dbType][tag]
 				case "nn":
