@@ -134,8 +134,8 @@ var typeMapping = map[string]map[string]string{
 		"usi": "SMALLINT UNSIGNED",
 		"mi":  "MIDDLEINT",
 		"umi": "MIDDLEINT UNSIGNED",
-		"t":   "TEXT",
-		"bb":  "BLOB",
+		"t":   "LONGTEXT",
+		"bb":  "LONGBLOB",
 	},
 	"sqlite": {
 		"PK":  "UNIQUE",
